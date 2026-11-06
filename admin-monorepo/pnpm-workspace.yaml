@@ -1,0 +1,7 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# 允许 esbuild 执行安装脚本（pnpm 10 默认拦截依赖构建脚本）
+onlyBuiltDependencies:
+  - esbuild

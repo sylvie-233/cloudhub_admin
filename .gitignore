@@ -1,0 +1,8 @@
+node_modules/
+.turbo/
+
+# 本地环境变量（保留示例文件）
+.env
+.env.*
+!.env.example
+.tmp-deploy/

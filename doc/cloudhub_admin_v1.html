@@ -1,0 +1,2493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>云枢 Admin · 组织-岗位-角色权限体系原型</title>
+<style>
+:root{
+  --primary:#2563eb; --primary-dark:#1d4ed8; --primary-weak:#eaf0ff;
+  --bg:#f4f6fb; --panel:#fff; --line:#e6eaf2; --line-2:#f0f3f9;
+  --text:#1f2937; --text-2:#5b6676; --text-3:#98a3b5;
+  --ok:#15803d; --ok-bg:#e8f7ee; --warn:#b45309; --warn-bg:#fdf4e3; --danger:#dc2626; --danger-bg:#fdecec;
+  --radius:10px; --shadow:0 1px 2px rgba(16,24,40,.04),0 10px 24px -12px rgba(16,24,40,.14);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:13.5px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--primary);text-decoration:none}
+input,select,button,textarea{font-family:inherit}
+.hidden{display:none!important}
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
+.muted{color:var(--text-3);font-size:12px}
+
+/* login */
+.login{min-height:100vh;display:grid;place-items:center;padding:24px;
+  background:radial-gradient(1200px 600px at 10% 0%,#e8f0ff 0%,transparent 60%),
+             radial-gradient(900px 500px at 100% 100%,#eef7f1 0%,transparent 55%),#f6f8fc}
+.login-card{width:960px;max-width:100%;display:grid;grid-template-columns:1.05fr 1fr;background:#fff;border-radius:18px;overflow:hidden;
+  box-shadow:0 30px 70px -30px rgba(23,43,99,.35),0 2px 6px rgba(16,24,40,.06);border:1px solid #e9eef8}
+.login-side{padding:44px 40px;background:linear-gradient(150deg,#16307a 0%,#2563eb 55%,#3b82f6 100%);color:#fff;position:relative;overflow:hidden}
+.login-side::after{content:"";position:absolute;width:320px;height:320px;border-radius:50%;background:rgba(255,255,255,.10);right:-120px;bottom:-120px}
+.login-side::before{content:"";position:absolute;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.08);right:40px;top:-90px}
+.brand-mark{width:46px;height:46px;border-radius:13px;background:rgba(255,255,255,.18);display:grid;place-items:center;font-size:22px;font-weight:700;border:1px solid rgba(255,255,255,.3)}
+.login-side h1{font-size:24px;margin:22px 0 6px;letter-spacing:.5px}
+.login-sub{margin:0;color:#d7e3ff;font-size:12.5px;letter-spacing:.3px}
+.login-points{list-style:none;padding:0;margin:32px 0 0;font-size:13px;color:#e8efff}
+.login-points li{position:relative;padding-left:20px;margin-bottom:12px}
+.login-points li::before{content:"";position:absolute;left:0;top:7px;width:6px;height:6px;border-radius:50%;background:#a9c6ff;box-shadow:0 0 0 4px rgba(169,198,255,.18)}
+.login-foot{position:absolute;bottom:26px;left:40px;font-size:11.5px;color:#c7d7fb;letter-spacing:.4px}
+.login-form{padding:52px 48px}
+.login-form h2{margin:0 0 6px;font-size:20px}
+.login-form .hint{margin:0 0 24px;color:var(--text-3);font-size:12.5px}
+.login-form label{display:block;font-size:12.5px;color:var(--text-2);margin:0 0 6px}
+.lg-ipt{width:100%;height:42px;font-size:13.5px;padding:0 12px;margin-bottom:16px;border-radius:8px}
+.lg-row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;margin:2px 0 20px;color:var(--text-2)}
+.lg-row .ck{display:flex;align-items:center;gap:6px;margin:0;cursor:pointer}
+.lg-btn{width:100%;height:42px;font-size:14px;letter-spacing:6px;border-radius:8px}
+.lg-tip{margin-top:16px;font-size:11.5px;color:var(--text-3);text-align:center;line-height:1.7}
+
+/* shell */
+.app{display:grid;grid-template-columns:224px 1fr;height:100vh;overflow:hidden}
+.sidebar{background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.logo{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line-2)}
+.logo-mark{width:32px;height:32px;border-radius:9px;background:linear-gradient(140deg,#2563eb,#60a5fa);color:#fff;display:grid;place-items:center;font-weight:700;font-size:16px;box-shadow:0 4px 10px -2px rgba(37,99,235,.5)}
+.logo b{display:block;font-size:14px;letter-spacing:.2px}
+.logo small{display:block;color:var(--text-3);font-size:10px;letter-spacing:.6px;text-transform:uppercase}
+#nav{padding:12px 10px;overflow:auto;flex:1}
+.nav-group{font-size:11px;color:var(--text-3);letter-spacing:1px;padding:12px 10px 6px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--text-2);cursor:pointer;font-size:13.2px;margin-bottom:2px;user-select:none}
+.nav-item:hover{background:#f5f7fc;color:var(--text)}
+.nav-item.active{background:var(--primary-weak);color:var(--primary-dark);font-weight:600}
+.ni{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;flex:0 0 20px;background:#eef2f9;position:relative}
+.ni::after{content:"";width:7px;height:7px;border-radius:2px;background:#9db1cc}
+.nav-item.active .ni{background:#dbe6ff}
+.nav-item.active .ni::after{background:var(--primary)}
+.nav-item[data-page="org"] .ni::after{border-radius:50%}
+.nav-item[data-page="post"] .ni::after{transform:rotate(45deg)}
+.nav-item[data-page="menu"] .ni::after{width:9px;height:2px;box-shadow:0 3px 0 #9db1cc,0 -3px 0 #9db1cc}
+.nav-item.active[data-page="menu"] .ni::after{background:var(--primary);box-shadow:0 3px 0 var(--primary),0 -3px 0 var(--primary)}
+.ni.ico::after{display:none}
+.ni svg{width:15px;height:15px;color:#8ba0bc}
+.nav-item:hover .ni svg{color:#6b7f9c}
+.nav-item.active .ni svg{color:var(--primary)}
+.side-foot{padding:12px 18px;border-top:1px solid var(--line-2);font-size:11.5px;color:var(--text-3);display:flex;align-items:center;gap:7px}
+.dot{width:6px;height:6px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px #e9f9ef}
+
+.main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.topbar{height:56px;flex:0 0 56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:16px}
+.crumb{font-size:13px;color:var(--text-3)}
+.crumb b{color:var(--text);font-weight:600}
+.top-right{display:flex;align-items:center;gap:8px}
+.icon-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--text-2);position:relative}
+.icon-btn:hover{background:#f6f8fc}
+.badge-dot{position:absolute;top:6px;right:7px;width:6px;height:6px;border-radius:50%;background:#ef4444;border:1.5px solid #fff}
+.user-box{position:relative;display:flex;align-items:center;gap:9px;padding:4px 8px 4px 4px;border-radius:10px;cursor:pointer}
+.user-box:hover{background:#f6f8fc}
+.avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(140deg,#2563eb,#7aa7ff);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:600}
+.user-box b{display:block;font-size:12.5px;line-height:1.3}
+.user-box small{display:block;color:var(--text-3);font-size:10.5px;line-height:1.3}
+.caret{color:var(--text-3);font-size:10px}
+.user-menu{display:none;position:absolute;right:0;top:44px;width:210px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:10px;z-index:20}
+.user-menu.open{display:block}
+.user-menu .um-head{font-size:11px;color:var(--text-3);padding:2px 6px 8px;border-bottom:1px solid var(--line-2);margin-bottom:6px;line-height:1.7}
+.user-menu a{display:block;padding:7px 10px;border-radius:6px;color:var(--text-2);font-size:12.5px;cursor:pointer}
+.user-menu a:hover{background:#f5f7fc;color:var(--primary)}
+
+.content{flex:1;overflow:auto;padding:18px 20px 40px}
+.page{max-width:1360px;margin:0 auto;animation:fade .18s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin:2px 0 12px}
+.page-head h2{margin:0 0 3px;font-size:17px;letter-spacing:.2px}
+.page-head p{margin:0;color:var(--text-3);font-size:12.5px}
+.head-actions{display:flex;gap:8px}
+
+.note{background:#f8faff;border:1px solid #e2eaf8;color:#4b5a72;font-size:12.3px;padding:9px 12px;border-radius:8px;margin-bottom:12px;display:flex;gap:9px;align-items:flex-start;line-height:1.65}
+.note b{color:#30508f;font-weight:600}
+.note i{width:16px;height:16px;border-radius:50%;background:#dbe6ff;color:#2563eb;font-style:normal;font-size:11px;display:grid;place-items:center;flex:0 0 16px;margin-top:1px;font-weight:700}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.card-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line-2);font-size:13.5px}
+.card-head b{font-weight:600}
+.card-body{padding:16px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.split{display:grid;grid-template-columns:264px 1fr;gap:14px;align-items:start}
+.btn{height:32px;padding:0 14px;border-radius:7px;border:1px solid #dbe2ec;background:#fff;color:var(--text-2);font-size:13px;cursor:pointer;transition:.12s;white-space:nowrap}
+.btn:hover{border-color:#c3cede;color:var(--text);background:#fbfcfe}
+.btn-primary{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 2px 6px -1px rgba(37,99,235,.35)}
+.btn-primary:hover{background:var(--primary-dark);border-color:var(--primary-dark);color:#fff}
+.btn-danger{color:var(--danger);border-color:#f2c9c9}
+.btn-danger:hover{background:var(--danger-bg);border-color:#eab0b0;color:var(--danger)}
+.btn-text{border:none;background:none;color:var(--primary);padding:0 5px;height:24px;font-size:12.5px;cursor:pointer}
+.btn-text:hover{text-decoration:underline}
+.btn-text.danger{color:var(--danger)}
+.ipt{height:32px;border:1px solid #dbe2ec;border-radius:7px;padding:0 10px;font-size:13px;background:#fff;color:var(--text);outline:none;min-width:0}
+.ipt:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+textarea.ipt{height:auto;padding:8px 10px;resize:vertical;line-height:1.6}
+.filters{display:flex;flex-wrap:wrap;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line-2);background:#fcfdff}
+.filters .ipt{width:178px}
+.tag{display:inline-block;padding:0 8px;border-radius:999px;font-size:11.5px;line-height:19px;border:1px solid transparent;white-space:nowrap}
+.tag-ok{background:var(--ok-bg);color:var(--ok);border-color:#cdebd8}
+.tag-off{background:#f1f3f7;color:#7b8698;border-color:#e3e8f0}
+.tag-blue{background:var(--primary-weak);color:var(--primary-dark);border-color:#d5e1ff}
+.tag-warn{background:var(--warn-bg);color:var(--warn);border-color:#f2e0bf}
+.tag-red{background:var(--danger-bg);color:var(--danger);border-color:#f6cfcf}
+.tag-violet{background:#f1eeff;color:#5b46b8;border-color:#ded6fb}
+
+.tbl-wrap{overflow:auto}
+table.tbl{width:100%;border-collapse:collapse}
+.tbl th{background:#f8fafd;color:var(--text-2);font-weight:600;font-size:12.3px;text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl td{padding:9px 14px;border-bottom:1px solid var(--line-2);font-size:13px;vertical-align:middle}
+.tbl tbody tr:hover td{background:#fafcff}
+.tbl tbody tr:last-child td{border-bottom:none}
+.tbl .num{color:var(--text-3);font-size:12.3px}
+.tbl .op{white-space:nowrap}
+.tbl .op .sep{color:#e2e8f2;margin:0 1px}
+.cell-sub{display:block;color:var(--text-3);font-size:11.5px;line-height:1.5;margin-top:1px}
+.stack{display:flex;flex-direction:column;gap:3px}
+.pager{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-top:1px solid var(--line-2);color:var(--text-3);font-size:12.5px}
+
+/* 系统日志 */
+.log-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.log-sum .ls{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:var(--shadow);display:flex;align-items:center;gap:11px}
+.log-sum .ls i{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;background:var(--primary-weak);color:var(--primary-dark);flex:0 0 32px}
+.log-sum .ls.ok i{background:var(--ok-bg);color:var(--ok)}
+.log-sum .ls.bad i{background:var(--danger-bg);color:var(--danger)}
+.log-sum .ls span{display:block;font-size:11.5px;color:var(--text-3)}
+.log-sum .ls b{display:block;font-size:19px;letter-spacing:-.3px;margin-top:1px;font-weight:700}
+.pgs{display:flex;gap:4px;align-items:center}
+.pgs a{min-width:26px;height:26px;padding:0 7px;border:1px solid var(--line);border-radius:6px;display:grid;place-items:center;color:var(--text-2);cursor:pointer;font-size:12.5px}
+.pgs a:hover{border-color:#bcd0f5;color:var(--primary-dark)}
+.pgs a.on{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
+.pgs a.dis{color:#c3ccda;cursor:not-allowed;border-color:var(--line-2)}
+.log-msg{display:block;margin-top:2px;font-size:11.5px;color:var(--text-3);white-space:nowrap}
+.kv{display:grid;grid-template-columns:88px 1fr;gap:9px 12px;font-size:13px}
+.kv span{color:var(--text-3);font-size:12.5px}
+.kv b{font-weight:500;word-break:break-all}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.stat span{font-size:12.5px;color:var(--text-3)}
+.stat b{display:block;font-size:26px;letter-spacing:-.5px;margin:6px 0 2px;font-weight:700}
+.stat em{font-size:11.5px;color:var(--ok);font-style:normal}
+.stat::after{content:"";position:absolute;right:-24px;top:-24px;width:74px;height:74px;border-radius:50%;background:var(--primary-weak);opacity:.55}
+.quick{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.quick a{display:flex;flex-direction:column;gap:6px;align-items:center;padding:14px 6px;border:1px solid var(--line-2);border-radius:9px;background:#fcfdff;color:var(--text-2);font-size:12.5px;cursor:pointer}
+.quick a:hover{border-color:#cfdcf7;background:#f7faff;color:var(--primary)}
+.quick i{width:26px;height:26px;border-radius:8px;background:var(--primary-weak);display:grid;place-items:center;color:var(--primary);font-style:normal;font-size:12px;font-weight:700}
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:11px;font-size:12.5px}
+.bar-row .nm{width:86px;color:var(--text-2);flex:0 0 86px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{flex:1;height:8px;border-radius:99px;background:#eff3fa;overflow:hidden}
+.bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#3b82f6,#2563eb)}
+.bar-row .vl{width:30px;text-align:right;color:var(--text-3);font-size:11.5px}
+
+/* tree table + tree panel */
+.tree-name{display:flex;align-items:center;gap:6px}
+.tree-toggle{width:16px;height:16px;border-radius:4px;display:inline-grid;place-items:center;cursor:pointer;color:var(--text-3);font-size:10px;border:1px solid transparent;flex:0 0 16px}
+.tree-toggle:hover{background:#eef2f9;color:var(--primary)}
+.tree-toggle.ph{visibility:hidden}
+.tree-dot{width:5px;height:5px;border-radius:50%;background:#cbd5e4;flex:0 0 5px}
+.tree-body{padding:8px;max-height:600px;overflow:auto}
+.tree-node{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:7px;cursor:pointer;font-size:13px;color:var(--text-2)}
+.tree-node:hover{background:#f5f8fd}
+.tree-node.on{background:var(--primary-weak);color:var(--primary-dark);font-weight:600}
+.tree-node .tname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tree-node .cnt{font-size:11px;color:var(--text-3);background:#f1f4fa;border-radius:99px;padding:0 6px}
+.tree-node.on .cnt{background:#dbe6ff;color:var(--primary-dark)}
+.tree-node .tw{width:12px;color:var(--text-3);font-size:9px}
+
+/* tabs */
+.tabs{display:flex;gap:2px;padding:0 14px;border-bottom:1px solid var(--line);background:#fff;overflow:auto}
+.tab{padding:11px 14px;cursor:pointer;color:var(--text-2);font-size:13px;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tab:hover{color:var(--text)}
+.tab.on{color:var(--primary);border-bottom-color:var(--primary);font-weight:600}
+.tab em{font-style:normal;color:var(--text-3);font-size:11px;margin-left:4px}
+.empty{padding:44px 0;text-align:center;color:var(--text-3);font-size:12.5px}
+
+/* modal */
+.mask{position:fixed;inset:0;background:rgba(15,23,42,.4);display:flex;justify-content:center;align-items:flex-start;padding:56px 20px;z-index:60;overflow:auto}
+.modal{background:#fff;border-radius:12px;width:640px;max-width:100%;box-shadow:0 24px 70px -20px rgba(15,23,42,.4);animation:pop .16s ease}
+@keyframes pop{from{opacity:0;transform:translateY(-8px) scale(.99)}to{opacity:1;transform:none}}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line-2);font-size:14px}
+.modal-head .x{cursor:pointer;color:var(--text-3);font-size:13px;padding:2px 6px;border-radius:5px}
+.modal-head .x:hover{background:#f2f5fa;color:var(--text)}
+.modal-body{padding:18px}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line-2);background:#fcfdff;border-radius:0 0 12px 12px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px}
+.fi{display:flex;flex-direction:column;gap:6px;min-width:0}
+.fi.full{grid-column:1/-1}
+.fi label{font-size:12.5px;color:var(--text-2)}
+.fi label i{color:var(--danger);font-style:normal;margin-left:2px}
+.fi .ipt{width:100%}
+.ckline{display:flex;align-items:center;gap:16px;height:32px}
+.ckline label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer}
+.form-tip{font-size:11.5px;color:var(--text-3);margin-top:4px;line-height:1.7}
+.pick{display:flex;flex-wrap:wrap;gap:8px;max-height:150px;overflow:auto}
+.pick label{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid #dbe2ec;border-radius:999px;font-size:12.5px;cursor:pointer;color:var(--text-2);background:#fff}
+.pick label.on{border-color:var(--primary);background:var(--primary-weak);color:var(--primary-dark)}
+.pick input{display:none}
+/* 可搜索多选（用户表单：任职岗位 / 直接角色）：已选 chips + 下拉面板 */
+.msel-host{position:relative}
+.msel{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:38px;padding:5px 8px;border:1px solid #dbe2ec;border-radius:8px;background:#fff;cursor:pointer}
+.msel:hover{border-color:#c3cfe0}
+.msel-hint{color:var(--text-3);font-size:12.5px}
+.msel-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 5px 2px 10px;border:1px solid var(--primary);border-radius:999px;background:var(--primary-weak);color:var(--primary-dark);font-size:12px}
+.msel-chip i{font-style:normal;width:16px;height:16px;line-height:15px;text-align:center;border-radius:50%;cursor:pointer;font-size:11px}
+.msel-chip i:hover{background:rgba(37,99,235,.18)}
+.msel-more{font-size:11.5px;color:var(--text-3)}
+.msel-btn{margin-left:auto;flex:none;font-size:12px;color:var(--primary);padding:2px 8px;border-radius:6px;user-select:none}
+.msel-btn:hover{background:var(--primary-weak)}
+.msel-pop{display:none;flex-direction:column;position:absolute;left:0;right:0;top:calc(100% + 6px);background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);z-index:20;overflow:hidden}
+.msel-pop.open{display:flex}
+.msel-search{border:none;border-bottom:1px solid var(--line-2);outline:none;padding:9px 12px;font-size:13px;width:100%}
+.msel-list{max-height:236px;overflow:auto;padding:4px 0 6px}
+.msel-group{font-size:11px;color:var(--text-3);padding:8px 12px 2px}
+.msel-item{display:flex;align-items:center;gap:8px;padding:7px 12px;font-size:13px;color:var(--text-2);cursor:pointer}
+.msel-item:hover{background:#f6f8fd}
+.msel-item.on{color:var(--primary-dark)}
+.msel-item .ck{width:15px;height:15px;flex:none;border:1px solid #cbd5e1;border-radius:4px;display:grid;place-items:center;font-size:10.5px;color:#fff}
+.msel-item.on .ck{background:var(--primary);border-color:var(--primary)}
+.msel-empty{padding:16px 12px;text-align:center;color:var(--text-3);font-size:12.5px}
+/* 菜单图标选择器 */
+.ipick{position:relative}
+.ipick-btn{display:flex;align-items:center;gap:8px;min-height:34px;padding:5px 10px;border:1px solid #dbe2ec;border-radius:8px;background:#fff;cursor:pointer}
+.ipick-btn:hover{border-color:#c3cfe0}
+.ipick-btn.empty .ipick-name{color:var(--text-3)}
+.ipick-ico{width:18px;height:18px;display:grid;place-items:center;color:var(--primary);flex:none}
+.ipick-name{font-size:12.5px;color:var(--text-2)}
+.ipick-caret{margin-left:auto;color:var(--text-3);font-size:10px}
+.ipick-pop{display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:30;width:308px;padding:10px;
+  background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);
+  grid-template-columns:repeat(8,1fr);gap:6px}
+.ipick-pop.open{display:grid}
+.ipick-cell{height:32px;border:1px solid transparent;border-radius:8px;background:#f7f9fc;color:var(--text-2);
+  display:grid;place-items:center;cursor:pointer}
+.ipick-cell:hover{background:var(--primary-weak);color:var(--primary-dark)}
+.ipick-cell.on{border-color:var(--primary);background:var(--primary-weak);color:var(--primary-dark)}
+.ipick-clear{grid-column:1/-1;height:26px;display:grid;place-items:center;font-size:12px;color:var(--text-3);
+  border-top:1px solid var(--line-2);margin-top:2px;cursor:pointer}
+.ipick-clear:hover{color:var(--danger)}
+.mt-ico{width:20px;height:20px;border-radius:5px;background:#f2f5fb;color:var(--text-2);display:inline-grid;
+  place-items:center;flex:none;margin-right:6px;vertical-align:-4px}
+
+/* transfer */
+.tr-wrap{display:grid;grid-template-columns:1fr 34px 1fr;gap:10px;align-items:stretch}
+.tr-col{border:1px solid var(--line);border-radius:9px;overflow:hidden;display:flex;flex-direction:column;height:320px}
+.tr-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;background:#f8fafd;border-bottom:1px solid var(--line-2);font-size:12.5px;color:var(--text-2)}
+.tr-head .ipt{height:26px;width:118px;font-size:12px}
+.tr-list{flex:1;overflow:auto;padding:6px}
+.tr-item{display:flex;justify-content:space-between;gap:8px;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:12.8px}
+.tr-item:hover{background:var(--primary-weak)}
+.tr-item em{font-style:normal;color:var(--text-3);font-size:11.5px}
+.tr-mid{display:grid;place-items:center;color:var(--text-3);font-size:14px}
+.tr-empty{padding:24px 0;text-align:center;color:var(--text-3);font-size:12px}
+
+.cb{appearance:none;width:15px;height:15px;border:1.5px solid #c8d2e0;border-radius:4px;cursor:pointer;position:relative;background:#fff;vertical-align:middle}
+.cb:checked{background:var(--primary);border-color:var(--primary)}
+.cb:checked::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:1.6px solid #fff;border-top:0;border-left:0;transform:rotate(42deg)}
+.cb:disabled{background:#eef2f9;border-color:#dbe3ee;cursor:not-allowed}
+.cb:disabled:checked{background:#9fb4d6;border-color:#9fb4d6}
+.seg{display:inline-flex;border:1px solid #dbe2ec;border-radius:7px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:4px 9px;font-size:11.5px;color:var(--text-2);cursor:pointer;border-right:1px solid #e8edf5}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--primary-weak);color:var(--primary-dark);font-weight:600}
+.pi-name{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis}
+/* 权限管理：左侧授权对象列表 */
+.pw{display:grid;grid-template-columns:250px minmax(0,1fr);gap:14px;align-items:start}
+.plist{max-height:452px;overflow:auto;margin:0 -4px}
+.pitem{padding:6px 10px;border-radius:9px;border:1px solid transparent;cursor:pointer;margin-bottom:1px}
+.pitem:hover{background:#f7f9fd}
+.pitem.on{background:var(--primary-weak);border-color:#cfdcfb}
+.pitem .pi-top{display:flex;align-items:center;gap:7px;white-space:nowrap}
+.pitem.post .pi-name{font-weight:500}
+.tico{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center}
+.tico svg{display:block}
+.tabs-line{display:flex;gap:4px}
+.tabs-line .tl{padding:3px 11px;border-radius:99px;font-size:12.5px;color:var(--text-2);cursor:pointer;user-select:none}
+.tabs-line .tl.on{background:var(--primary-weak);color:var(--primary-dark);font-weight:600}
+.ptools{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:9px 16px;border-bottom:1px solid var(--line-2);background:#fcfdff}
+.ptools .ipt{width:190px}
+.ptools .ck{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--text-2);cursor:pointer}
+.ptools .ck input{margin:0}
+.ptools .sp{margin-left:auto}
+.ptree{max-height:452px;overflow:auto;padding:8px 12px}
+.pgroup+.pgroup{border-top:1px solid var(--line-2);margin-top:6px;padding-top:6px}
+.prow{display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:7px}
+.prow:hover{background:#f7f9fd}
+.prow .pc{margin-left:auto;font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--text-3)}
+.ptri{width:13px;text-align:center;color:var(--text-3);cursor:pointer;font-size:11px;user-select:none}
+.prow-name{font-size:12.8px;color:var(--text-1)}
+.prow-act .prow-name{font-size:12px;color:var(--text-2)}
+.tty{display:inline-block;padding:0 6px;border-radius:5px;font-size:10.5px;line-height:16px;border:1px solid transparent;white-space:nowrap;font-weight:600;flex:0 0 auto}
+.tty-dir{background:#eef1f7;color:#65718a;border-color:#e2e7f0}
+.tty-menu{background:var(--primary-weak);color:var(--primary-dark);border-color:#d5e1ff}
+.tty-act{background:#fff;color:#8d97a8;border-color:#e5eaf2}
+.pchips{display:flex;flex-wrap:wrap;gap:6px;padding:1px 6px 7px 42px}
+/* 用户「查看权限」弹窗 */
+.uv{display:flex;gap:12px;align-items:stretch}
+.uv-left{width:196px;flex:0 0 auto;border:1px solid var(--line);border-radius:9px;padding:6px;overflow:auto;max-height:470px}
+.uv-title{font-size:12px;font-weight:700;color:var(--text-2);padding:4px 8px 2px}
+.uv-grp{font-size:11px;color:var(--text-3);padding:8px 8px 2px}
+.uv-src{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:7px;cursor:pointer;font-size:12.5px;color:var(--text-1);white-space:nowrap}
+.uv-src:hover{background:#f7f9fd}
+.uv-src.on{background:var(--primary-weak);color:var(--primary-dark);font-weight:600}
+.uv-src .pc{margin-left:auto;font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--text-3)}
+.uv-right{flex:1;min-width:0;border:1px solid var(--line);border-radius:9px;display:flex;flex-direction:column}
+.uv-head{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line-2)}
+.uv-head b{font-size:13px}
+.uv-sum{padding:8px 12px 0;font-size:12px;color:var(--text-3)}
+.pchip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border:1px solid #dbe2ec;border-radius:999px;font-size:12px;color:var(--text-2);background:#fff;cursor:pointer;user-select:none}
+.pchip.on{border-color:var(--primary);background:var(--primary-weak);color:var(--primary-dark)}
+.pchip i{width:11px;height:11px;border-radius:3px;border:1px solid #c6cfdd;background:#fff;flex:0 0 auto}
+.pchip.on i{background:var(--primary);border-color:var(--primary)}
+.pbar{display:flex;align-items:center;gap:12px;border-top:1px solid var(--line);padding:10px 16px}
+.pbar .sp{margin-left:auto}
+/* 角色管理：左角色列表 + 右角色用户 */
+.role2{display:grid;grid-template-columns:318px minmax(0,1fr);gap:14px;align-items:start}
+.rl-head{display:flex;align-items:center;gap:8px;padding:11px 12px;border-bottom:1px solid var(--line-2)}
+.rl-head .ipt{flex:1;min-width:0}
+.rl-head .muted{font-size:11.5px;white-space:nowrap}
+.rlist{max-height:566px;overflow:auto;padding:8px}
+.ritem{padding:9px 12px;border:1px solid transparent;border-radius:9px;cursor:pointer;margin-bottom:2px}
+.ritem:hover{background:#f7f9fd;border-color:var(--line)}
+.ritem.on{background:var(--primary-weak);border-color:#cfdcfb}
+.ritem .rn{display:flex;align-items:center;gap:6px}
+.ritem .rn b{font-size:13px}
+.ritem .rk{font-size:11.5px;color:var(--text-3);margin-top:2px}
+.ritem .rk em{font-family:ui-monospace,Consolas,monospace;font-style:normal;margin-right:6px}
+.rd-head{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
+.rd-meta{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;font-size:11.5px;color:var(--text-3)}
+.rd-meta b{color:var(--text-2);font-weight:600}
+.org3{display:grid;grid-template-columns:236px 292px minmax(0,1fr);gap:14px;align-items:stretch}
+.op-col{display:flex;flex-direction:column;padding:0}
+.op-tree{flex:1;min-height:430px;max-height:560px}
+.op-acts{border-top:1px solid var(--line-2);padding:9px 12px;display:flex;flex-wrap:wrap;gap:2px;min-height:40px;align-items:center}
+.op-acts:empty::after{content:'选中组织后可维护';color:var(--text-3);font-size:11.5px}
+.op-posts{flex:1;overflow:auto;padding:8px 8px 8px 4px;max-height:520px}
+.op-right{flex:1;overflow:auto;padding:12px 14px;max-height:568px}
+.op-kw{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+.op-kw .ipt{width:160px}
+.legend{display:flex;gap:16px;padding:10px 16px;border-top:1px solid var(--line-2);color:var(--text-3);font-size:11.5px;align-items:center;flex-wrap:wrap}
+#toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:99;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+.tst{background:#fff;border:1px solid var(--line);border-left:3px solid var(--primary);border-radius:8px;padding:9px 16px;font-size:12.8px;box-shadow:0 10px 30px -10px rgba(16,24,40,.3);animation:drop .18s ease;max-width:520px}
+.tst.ok{border-left-color:#16a34a}
+@keyframes drop{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+@media (max-width:1180px){.stats{grid-template-columns:repeat(2,1fr)}.grid-2{grid-template-columns:1fr}.split{grid-template-columns:1fr}}
+@media (max-width:900px){.login-card{grid-template-columns:1fr}.login-side{display:none}.app{grid-template-columns:64px 1fr}.logo b,.logo small,.nav-item span:last-child,.nav-group,.side-foot{display:none}}
+</style>
+</head>
+<body>
+
+<!-- ================= 登录 ================= -->
+<div class="login" id="loginScreen">
+  <div class="login-card">
+    <div class="login-side">
+      <div class="brand-mark">云</div>
+      <h1>云枢管理平台</h1>
+      <p class="login-sub">CLOUDHUB ADMIN · 组织与权限体系</p>
+      <ul class="login-points">
+        <li>多级组织树，最多 9 层</li>
+        <li>组织不绑用户，人员通过岗位归属</li>
+        <li>用户走角色，岗位 / 组织直接授权</li>
+        <li>岗位序列汇报线可跨组织</li>
+      </ul>
+      <div class="login-foot">v3.0 · © 2026 云枢科技</div>
+    </div>
+    <div class="login-form">
+      <h2>账号登录</h2>
+      <p class="hint">请使用企业账号登录，多岗位账号可在登录后切换身份</p>
+      <label for="lgUser">登录账号</label>
+      <input class="ipt lg-ipt" id="lgUser" value="admin" autocomplete="username">
+      <label for="lgPwd">登录密码</label>
+      <input class="ipt lg-ipt" id="lgPwd" type="password" value="admin123" autocomplete="current-password">
+      <div class="lg-row">
+        <label class="ck"><input type="checkbox" checked> 记住账号</label>
+        <a href="javascript:;" onclick="toast('请联系系统管理员重置：admin@cloudhub.cn')">忘记密码？</a>
+      </div>
+      <button class="btn btn-primary lg-btn" onclick="doLogin()">登 录</button>
+      <div class="lg-tip">演示账号 admin / admin123<br>对应 sys_user 中预置的 BCrypt 密码</div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 主框架 ================= -->
+<div class="app hidden" id="app">
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-mark">云</div>
+      <div><b>云枢 Admin</b><small>Org · Post · Role</small></div>
+    </div>
+    <nav id="nav">
+      <div class="nav-group">概览</div>
+      <div class="nav-item active" data-page="dashboard" onclick="go('dashboard')"><i class="ni"></i><span>工作台</span></div>
+      <div class="nav-group">系统权限</div>
+      <div class="nav-item" data-page="org" onclick="go('org')"><i class="ni"></i><span>组织管理</span></div>
+      <div class="nav-item" data-page="user" onclick="go('user')"><i class="ni"></i><span>用户管理</span></div>
+      <div class="nav-item" data-page="role" onclick="go('role')"><i class="ni"></i><span>角色管理</span></div>
+      <div class="nav-item" data-page="menu" onclick="go('menu')"><i class="ni"></i><span>菜单管理</span></div>
+      <div class="nav-item" data-page="perm" onclick="go('perm')"><i class="ni"></i><span>权限管理</span></div>
+      <div class="nav-item" data-page="log" onclick="go('log')"><i class="ni ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M7 9.5 9.5 12 7 14.5M12.5 15H17"/></svg></i><span>系统日志</span></div>
+    </nav>
+    <div class="side-foot"><span class="dot"></span> 服务运行正常</div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb" id="crumb">首页 / <b>工作台</b></div>
+      <div class="top-right">
+        <button class="icon-btn" onclick="toast('暂无新的系统通知')">◔<span class="badge-dot"></span></button>
+        <div class="user-box" onclick="toggleUserMenu(event)">
+          <div class="avatar">超</div>
+          <div><b>超级管理员</b><small>admin · 董事长</small></div>
+          <span class="caret">▾</span>
+          <div class="user-menu" id="userMenu">
+            <div class="um-head">当前身份：云枢科技集团 / 董事长<br>可切换岗位：集团董事长</div>
+            <a onclick="toast('打开个人中心（原型略）')">个人中心</a>
+            <a onclick="toast('打开修改密码（原型略）')">修改密码</a>
+            <a onclick="logout()">退出登录</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="content" id="content">
+
+      <!-- 工作台 -->
+      <section class="page" data-page="dashboard">
+        <div class="page-head"><div><h2>工作台</h2><p>组织、岗位与三维授权的整体概览</p></div>
+          <div class="head-actions"><button class="btn" onclick="renderDashboard();toast('数据已刷新')">刷新数据</button></div>
+        </div>
+        <div class="stats" id="stats"></div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><b>快捷入口</b><span class="muted">常用操作</span></div>
+            <div class="card-body"><div class="quick">
+              <a onclick="go('org');openOrgForm()"><i>+</i>新建组织</a>
+              <a onclick="go('org');openPostForm()"><i>◇</i>新增岗位</a>
+              <a onclick="go('user');openUserForm()"><i>●</i>新增用户</a>
+              <a onclick="go('role')"><i>◆</i>角色授权</a>
+            </div></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><b>各部门在岗人数</b><span class="muted">按岗位归属统计</span></div>
+            <div class="card-body" id="orgBars"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><b>最近登录记录</b><span class="muted">来源表 sys_logininfor · <a onclick="go('log')" style="color:var(--primary);cursor:pointer">进入系统日志 ›</a></span></div>
+          <div id="loginLog"></div>
+        </div>
+      </section>
+
+      <!-- 组织管理 -->
+      <section class="page hidden" data-page="org">
+        <div class="page-head">
+          <div><h2>组织管理</h2><p>左侧选组织，中间维护岗位与汇报线，右侧查看该组织（含下级）的在岗用户</p></div>
+          <div class="head-actions">
+            <button class="btn btn-primary" onclick="openOrgForm()">+ 新建组织</button>
+          </div>
+        </div>
+        <div class="note"><i>i</i><span><b>组织不直接绑定用户。</b>新建组织时自动生成「默认岗位」，每个组织只能有一个「责任岗位」，责任岗位上的在岗人即该组织责任人。岗位可设上级岗位形成汇报线，汇报线可跨组织。</span></div>
+        <div class="org3">
+          <div class="card op-col">
+            <div class="card-head"><b>组织</b><span class="muted" id="opOrgCnt"></span></div>
+            <div class="tree-body op-tree" id="orgTree"></div>
+            <div class="op-acts" id="opOrgActs"></div>
+          </div>
+          <div class="card op-col">
+            <div class="card-head"><b id="opPostTitle">岗位</b><button class="btn-text" onclick="openPostForm()">+ 新增岗位</button></div>
+            <div class="op-posts tree-body" id="opPosts"></div>
+            <div class="op-acts" id="opPostActs"></div>
+          </div>
+          <div class="card op-col op-wide">
+            <div class="card-head">
+              <b>在岗用户</b>
+              <span class="muted" id="opRightMeta"></span>
+            </div>
+            <div class="op-right" id="opRight"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 权限管理 -->
+      <section class="page hidden" data-page="perm">
+        <div class="page-head">
+          <div><h2>权限管理</h2><p>左侧选择授权对象（组织 / 岗位 / 角色），右侧勾选菜单与动作权限；角色另有数据权限配置</p></div>
+        </div>
+        <div class="pw">
+          <div class="card" style="padding:12px">
+            <div class="tabs-line" id="permTabs" style="margin-bottom:10px">
+              <span class="tl" id="ptPostOrg" onclick="permSwitchTab('postorg')">岗位 / 组织权限</span>
+              <span class="tl" id="ptRole" onclick="permSwitchTab('role')">角色权限</span>
+            </div>
+            <div id="permLeftSearch"></div>
+            <div class="plist" id="permLeft"></div>
+            <div class="legend" style="margin:10px 0 0"><span>最终权限 = 用户角色 ∪ 岗位权限 ∪ 组织权限</span></div>
+          </div>
+          <div>
+            <div class="card" id="permPanel"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 用户管理 -->
+      <section class="page hidden" data-page="user">
+        <div class="page-head">
+          <div><h2>用户管理</h2><p>用户只挂岗位，组织归属由岗位推导；最终权限 = 用户角色 ∪ 岗位权限 ∪ 组织权限</p></div>
+          <div class="head-actions">
+            <button class="btn" onclick="toast('已生成导入模板 user_template.xlsx')">导入</button>
+            <button class="btn" onclick="toast('已导出 ' + DB.users.length + ' 条用户数据')">导出</button>
+            <button class="btn btn-primary" onclick="openUserForm()">+ 新增用户</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="filters">
+            <input class="ipt" id="uKw" placeholder="账号 / 昵称 / 手机号" oninput="renderUsers()">
+            <select class="ipt" id="uOrg" onchange="renderUsers()"></select>
+            <select class="ipt" id="uStatus" onchange="renderUsers()">
+              <option value="">全部状态</option><option value="0">正常</option><option value="1">停用</option>
+            </select>
+            <button class="btn btn-primary" onclick="renderUsers();toast('查询完成')">查询</button>
+            <button class="btn" onclick="resetUserFilter()">重置</button>
+          </div>
+          <div class="tbl-wrap" id="userTbl"></div>
+          <div class="pager"><span id="userCount"></span><span class="muted">最终权限 = 用户角色 ∪ 岗位权限 ∪ 组织权限</span></div>
+        </div>
+      </section>
+
+      <!-- 角色管理 -->
+      <section class="page hidden" data-page="role">
+        <div class="page-head">
+          <div><h2>角色管理</h2><p>左侧选择角色，右侧维护该角色下的用户；角色只授予用户，菜单权限与数据范围随角色生效</p></div>
+          <div class="head-actions"><button class="btn btn-primary" onclick="openRoleForm()">+ 新增角色</button></div>
+        </div>
+        <div class="role2">
+          <div class="card" style="padding:0">
+            <div class="rl-head">
+              <input class="ipt" id="rKw" placeholder="搜索角色名称 / 权限字符" oninput="renderRoles()">
+              <span class="muted" id="roleCount"></span>
+            </div>
+            <div class="rlist" id="roleList"></div>
+          </div>
+          <div class="card" id="roleDetail"></div>
+        </div>
+      </section>
+
+      <!-- 菜单管理 -->
+      <section class="page hidden" data-page="menu">
+        <div class="page-head">
+          <div><h2>菜单管理</h2><p>目录 / 菜单 / 动作 三级结构，动作权限标识即后端鉴权点</p></div>
+          <div class="head-actions">
+            <button class="btn" onclick="toggleAllMenu()">展开 / 折叠</button>
+            <button class="btn btn-primary" onclick="openMenuForm()">+ 新增菜单</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="filters">
+            <input class="ipt" id="mKw" placeholder="菜单名称 / 权限标识" oninput="renderMenus()">
+            <select class="ipt" id="mType" onchange="renderMenus()">
+              <option value="">全部类型</option><option value="M">目录</option><option value="C">菜单</option><option value="F">动作</option>
+            </select>
+            <button class="btn btn-primary" onclick="renderMenus()">查询</button>
+          </div>
+          <div class="tbl-wrap" id="menuTbl"></div>
+          <div class="pager"><span id="menuCount"></span><span class="muted">权限标识建议遵循 模块:实体:动作</span></div>
+        </div>
+      </section>
+
+      <!-- 系统日志 -->
+      <section class="page hidden" data-page="log">
+        <div class="page-head">
+          <div><h2>系统日志</h2><p>登录日志记录每次登录尝试的账号、岗位、来源 IP、设备与结果，来源表 sys_logininfor</p></div>
+          <div class="head-actions">
+            <button class="btn" onclick="exportLogs()">导出</button>
+            <button class="btn" onclick="confirmCleanLogs()">清空日志</button>
+          </div>
+        </div>
+        <div class="log-sum" id="logSum"></div>
+        <div class="card">
+          <div class="filters">
+            <input class="ipt" id="lKw" placeholder="账号 / IP / 登录地点" oninput="logState.page=1;renderLogs()">
+            <select class="ipt" id="lStatus" onchange="logState.page=1;renderLogs()">
+              <option value="">全部结果</option><option value="0">登录成功</option><option value="1">登录失败</option>
+            </select>
+            <select class="ipt" id="lRange" onchange="logState.page=1;renderLogs()">
+              <option value="">全部时间</option><option value="1">今天</option><option value="7" selected>近 7 天</option><option value="30">近 30 天</option>
+            </select>
+            <button class="btn btn-primary" onclick="renderLogs();toast('查询完成')">查询</button>
+            <button class="btn" onclick="resetLogFilter()">重置</button>
+          </div>
+          <div class="tbl-wrap" id="logTbl"></div>
+          <div class="pager"><span id="logCount"></span><span class="pgs" id="logPager"></span></div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toast"></div>
+
+<script>
+/* =========================================================
+   数据（与 SQL 种子数据一致）
+   ========================================================= */
+function isLeaderPost(p){
+  const o = orgById(p.orgId);
+  return !!o && o.leaderPostId === p.id;
+}
+function postTag(p){
+  if(isLeaderPost(p)) return '<span class="tag tag-warn">责任岗位</span>';
+  return '<span class="tag tag-blue">普通岗位</span>';
+}
+const SCOPE_NAME = {'1':'全部数据','2':'自定义数据','3':'本组织数据','4':'本组织及以下','5':'仅本人数据'};
+
+/* 菜单图标库：内置 24×24 线性图标，key 与 sys_menu.icon 对应 */
+const ICON_LIB = [
+  {key:'home',    name:'首页',   d:'<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V21h13V9.5"/>'},
+  {key:'grid',    name:'应用',   d:'<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>'},
+  {key:'users',   name:'用户',   d:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.2 2.7-5 6-5s6 1.8 6 5"/><path d="M16 11.2a3 3 0 0 0 0-6"/><path d="M18.5 20c0-2.2-.7-3.9-2-4.9"/>'},
+  {key:'building',name:'组织',   d:'<rect x="4" y="3.5" width="10" height="17" rx="1.5"/><path d="M14 9h6v11.5h-6"/><path d="M7 7h4M7 10.5h4M7 14h4M17 12h.01M17 15.5h.01"/>'},
+  {key:'badge',   name:'岗位',   d:'<rect x="4" y="6.5" width="16" height="13.5" rx="2"/><path d="M9 6.5V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1.5"/><path d="M8.5 12h7M8.5 16h4"/>'},
+  {key:'shield',  name:'角色',   d:'<path d="M12 3l7 3v6c0 4.4-2.9 7.4-7 9-4.1-1.6-7-4.6-7-9V6l7-3z"/>'},
+  {key:'menu',    name:'菜单',   d:'<path d="M4 6h16M4 12h16M4 18h10"/>'},
+  {key:'key',     name:'权限',   d:'<circle cx="8" cy="8" r="4"/><path d="M11 11l8 8"/><path d="M16.5 16.5l2-2M19 19l2-2"/>'},
+  {key:'settings',name:'设置',   d:'<circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.2M12 18.8V21M4.2 7.5l1.9 1.1M17.9 15.4l1.9 1.1M4.2 16.5l1.9-1.1M17.9 8.6l1.9-1.1"/>'},
+  {key:'chart',   name:'报表',   d:'<path d="M4 4v16h16"/><rect x="7.5" y="12" width="3" height="5"/><rect x="14" y="8" width="3" height="9"/>'},
+  {key:'file',    name:'文档',   d:'<path d="M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-10L14 3.5z"/><path d="M14 3.5V8.5h4.5"/>'},
+  {key:'folder',  name:'目录',   d:'<path d="M3.5 7.5a2 2 0 0 1 2-2h3.2l2 2.5h7.8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>'},
+  {key:'calendar',name:'日程',   d:'<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/>'},
+  {key:'bell',    name:'通知',   d:'<path d="M18 16V11a6 6 0 1 0-12 0v5l-1.5 2.5h15L18 16z"/><path d="M10 19.2a2 2 0 0 0 4 0"/>'},
+  {key:'search',  name:'搜索',   d:'<circle cx="11" cy="11" r="6.5"/><path d="M15.8 15.8L20 20"/>'},
+  {key:'lock',    name:'锁',     d:'<rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>'},
+  {key:'database',name:'数据库', d:'<ellipse cx="12" cy="6" rx="7.5" ry="3"/><path d="M4.5 6v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3V6"/><path d="M4.5 12v6c0 1.7 3.4 3 7.5 3s7.5-1.3 7.5-3v-6"/>'},
+  {key:'server',  name:'服务器', d:'<rect x="3.5" y="4" width="17" height="6.5" rx="1.6"/><rect x="3.5" y="13.5" width="17" height="6.5" rx="1.6"/><path d="M7 7.2h.01M7 16.7h.01"/>'},
+  {key:'tag',     name:'标签',   d:'<path d="M4 4h7.5L20 12.5 12.5 20 4 11.5V4z"/><circle cx="8" cy="8" r="1.3"/>'},
+  {key:'link',    name:'链接',   d:'<path d="M9.5 14.5l5-5"/><path d="M7.5 11.5 5 14a3.5 3.5 0 0 0 5 5l2.5-2.5"/><path d="M16.5 12.5 19 10a3.5 3.5 0 0 0-5-5l-2.5 2.5"/>'},
+  {key:'code',    name:'代码',   d:'<path d="M9 7l-5 5 5 5M15 7l5 5-5 5"/>'},
+  {key:'mail',    name:'邮件',   d:'<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3.6 7 12 13l8.4-6"/>'},
+  {key:'star',    name:'收藏',   d:'<path d="M12 4l2.4 5 5.6.8-4 3.9 1 5.5-5-2.7-5 2.7 1-5.5-4-3.9 5.6-.8L12 4z"/>'},
+  {key:'clock',   name:'时间',   d:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'},
+  {key:'flow',    name:'流程',   d:'<rect x="3" y="4" width="6" height="5" rx="1.2"/><rect x="15" y="15" width="6" height="5" rx="1.2"/><path d="M6 9v4a2 2 0 0 0 2 2h7"/>'},
+  {key:'log',     name:'日志',   d:'<rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M7 9.5 9.5 12 7 14.5M12.5 15H17"/>'},
+  {key:'layers',  name:'层级',   d:'<path d="M12 3.5 3.5 8 12 12.5 20.5 8 12 3.5z"/><path d="M3.5 12.5 12 17l8.5-4.5"/>'}
+];
+function iconSvg(key, size){
+  const it = ICON_LIB.find(x => x.key === key);
+  if(!it) return '';
+  return '<svg viewBox="0 0 24 24" width="' + size + '" height="' + size + '" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + it.d + '</svg>';
+}
+
+/* 菜单：按规格生成，动作ID = 菜单ID + 序号 */
+const MENU_SPEC = [
+  {key:'user', id:1001, name:'用户管理', path:'user', comp:'system/user/index', btns:[['用户查询','query'],['用户新增','add'],['用户修改','edit'],['用户删除','remove'],['重置密码','resetPwd'],['分配角色','authRole'],['查看权限','view']]},
+  {key:'org',  id:1002, name:'组织管理', path:'org',  comp:'system/org/index',  btns:[['组织查询','query',10021],['组织新增','add',10022],['组织修改','edit',10023],['组织删除','remove',10024],['设置责任岗位','setLeader',10025],['岗位查询','query',10031,'system:post:query'],['岗位新增','add',10032,'system:post:add'],['岗位修改','edit',10033,'system:post:edit'],['岗位删除','remove',10034,'system:post:remove']]},
+  {key:'role', id:1004, name:'角色管理', path:'role', comp:'system/role/index', btns:[['角色查询','query'],['角色新增','add'],['角色修改','edit'],['角色删除','remove'],['分配用户','authUser',10046]]},
+  {key:'menu', id:1005, name:'菜单管理', path:'menu', comp:'system/menu/index', btns:[['菜单查询','query'],['菜单新增','add'],['菜单修改','edit'],['菜单删除','remove']]},
+  {key:'perm', id:1006, name:'权限管理', path:'perm', comp:'system/perm/index', btns:[['权限查询','query',10061],['权限保存','save',10062],['数据权限','dataScope',10063]]},
+  {key:'logininfor', id:1007, name:'系统日志', path:'log', comp:'monitor/logininfor/index', btns:[['日志查询','query',10071],['日志导出','export',10072],['日志删除','remove',10073],['清空日志','clean',10074]]}
+];
+
+const DB = {
+  orgs: [
+    {id:100, parentId:0,   name:'云枢科技集团', code:'ZZ20251102001', level:1, order:1, leaderPostId:1, status:'0', time:'2025-11-02 09:12'},
+    {id:101, parentId:100, name:'深圳总部', code:'ZZ20251102002', level:2, order:1, leaderPostId:2, status:'0', time:'2025-11-02 09:12'},
+    {id:102, parentId:100, name:'长沙分公司', code:'ZZ20251102003', level:2, order:2, leaderPostId:13, status:'0', time:'2025-11-02 09:20'},
+    {id:103, parentId:101, name:'研发中心', code:'ZZ20251103001', level:3, order:1, leaderPostId:3, status:'0', time:'2025-11-03 10:02'},
+    {id:104, parentId:101, name:'产品设计部', code:'ZZ20251103002', level:3, order:2, leaderPostId:5, status:'0', time:'2025-11-03 10:05'},
+    {id:105, parentId:101, name:'质量保障部', code:'ZZ20251103003', level:3, order:3, leaderPostId:7, status:'0', time:'2025-11-03 10:08'},
+    {id:106, parentId:101, name:'财务部', code:'ZZ20251103004', level:3, order:4, leaderPostId:8, status:'0', time:'2025-11-03 10:11'},
+    {id:107, parentId:101, name:'运维部', code:'ZZ20251103005', level:3, order:5, leaderPostId:9, status:'0', time:'2025-11-03 10:14'},
+    {id:108, parentId:101, name:'人力资源部', code:'ZZ20251103006', level:3, order:6, leaderPostId:10, status:'0', time:'2025-11-03 10:17'},
+    {id:109, parentId:102, name:'市场部', code:'ZZ20251104001', level:3, order:1, leaderPostId:11, status:'0', time:'2025-11-04 14:20'},
+    {id:110, parentId:102, name:'财务部', code:'ZZ20251104002', level:3, order:2, leaderPostId:12, status:'1', time:'2025-11-04 14:24'}
+  ],
+  posts: [
+    {id:1,  orgId:100, parentId:0,  code:'GW20251102001', name:'董事长', sort:1,status:'0', roleIds:[1], time:'2025-11-02 09:30'},
+    {id:2,  orgId:101, parentId:1,  code:'GW20251102002', name:'总经理', sort:2,status:'0', roleIds:[3], time:'2025-11-02 09:31'},
+    {id:3,  orgId:103, parentId:2,  code:'GW20251103001', name:'项目经理', sort:3,status:'0', roleIds:[3], time:'2025-11-03 10:20'},
+    {id:4,  orgId:103, parentId:3,  code:'GW20251103002', name:'研发工程师', sort:4,status:'0', roleIds:[2], time:'2025-11-03 10:21'},
+    {id:5,  orgId:104, parentId:2,  code:'GW20251103003', name:'产品经理', sort:5,status:'0', roleIds:[3], time:'2025-11-03 10:22'},
+    {id:6,  orgId:104, parentId:5,  code:'GW20251103004', name:'视觉设计师', sort:6,status:'0', roleIds:[2], time:'2025-11-03 10:23'},
+    {id:7,  orgId:105, parentId:2,  code:'GW20251103005', name:'测试工程师', sort:7,status:'0', roleIds:[3], time:'2025-11-03 10:24'},
+    {id:8,  orgId:106, parentId:2,  code:'GW20251103006', name:'财务专员', sort:8,status:'0', roleIds:[4], time:'2025-11-03 10:25'},
+    {id:9,  orgId:107, parentId:2,  code:'GW20251103007', name:'运维工程师', sort:9,status:'0', roleIds:[2], time:'2025-11-03 10:26'},
+    {id:10, orgId:108, parentId:2,  code:'GW20251103008', name:'人事专员', sort:10, status:'0', roleIds:[5], time:'2025-11-03 10:27'},
+    {id:11, orgId:109, parentId:13,  code:'GW20251104001', name:'市场专员', sort:11, status:'0', roleIds:[2], time:'2025-11-04 14:30'},
+    {id:12, orgId:110, parentId:13,  code:'GW20251104002', name:'会计', sort:12, status:'0', roleIds:[4], time:'2025-11-04 14:32'},
+    {id:13, orgId:102, parentId:2,  code:'GW20251102003', name:'分公司综合岗', sort:13, status:'0', roleIds:[2], time:'2025-11-02 09:40'}
+  ],
+  roles: [
+    {id:1, name:'超级管理员', key:'admin', sort:1, scope:'1', status:'0', time:'2025-11-02 09:00', remark:'拥有全部权限，不受数据范围限制'},
+    {id:2, name:'普通员工',   key:'common', sort:2, scope:'5', status:'0', time:'2025-11-02 09:05', remark:'通用角色，仅本人数据'},
+    {id:3, name:'部门经理',   key:'manager', sort:3, scope:'4', status:'0', time:'2025-11-02 09:06', remark:'管理岗角色，本组织及以下'},
+    {id:4, name:'财务专员',   key:'finance', sort:4, scope:'3', status:'0', time:'2025-11-02 09:07', remark:'财务条线角色，本组织数据'},
+    {id:5, name:'人事专员',   key:'hr', sort:5, scope:'2', status:'0', time:'2025-11-02 09:08', remark:'人事条线角色，自定义范围'},
+    {id:6, name:'系统审计员', key:'auditor', sort:6, scope:'1', status:'0', time:'2025-11-02 09:09', remark:'只读全量数据'}
+  ],
+  orgRoles: [
+    {orgId:103, roleId:3},
+    {orgId:106, roleId:4},
+    {orgId:108, roleId:5}
+  ],
+  users: [
+    {id:1,  no:'U0001', username:'admin',   nick:'超级管理员', postIds:[1],       roleIds:[1], phone:'13800000001', email:'admin@cloudhub.cn',   sex:'0', status:'0', time:'2025-11-02 09:00', remark:'系统内置账号'},
+    {id:2,  no:'U0002', username:'zhangqy', nick:'张启元',     postIds:[1,2],     roleIds:[3],  phone:'13800000012', email:'zhangqy@cloudhub.cn', sex:'0', status:'0', time:'2025-11-05 10:11', remark:'集团董事长兼深圳总部总经理'},
+    {id:3,  no:'U0003', username:'liyan',   nick:'李妍',       postIds:[3,4],     roleIds:[3],  phone:'13800000013', email:'liyan@cloudhub.cn',   sex:'1', status:'0', time:'2025-11-05 10:14', remark:'研发中心责任人'},
+    {id:4,  no:'U0004', username:'wangtao', nick:'王涛',       postIds:[5],       roleIds:[2],  phone:'13800000014', email:'wangtao@cloudhub.cn', sex:'0', status:'0', time:'2025-11-06 09:22', remark:''},
+    {id:5,  no:'U0005', username:'zhaomin', nick:'赵敏',       postIds:[7],       roleIds:[2],  phone:'13800000015', email:'zhaomin@cloudhub.cn', sex:'1', status:'0', time:'2025-11-06 09:26', remark:''},
+    {id:6,  no:'U0006', username:'hanmei',  nick:'韩梅',       postIds:[8],       roleIds:[5],  phone:'13800000016', email:'hanmei@cloudhub.cn',  sex:'1', status:'0', time:'2025-11-07 11:03', remark:''},
+    {id:7,  no:'U0007', username:'zhoulin', nick:'周琳',       postIds:[9],       roleIds:[4],  phone:'13800000017', email:'zhoulin@cloudhub.cn', sex:'1', status:'0', time:'2025-11-07 11:08', remark:''},
+    {id:8,  no:'U0008', username:'chenxi',  nick:'陈曦',       postIds:[10],      roleIds:[6], phone:'13800000018', email:'chenxi@cloudhub.cn',  sex:'1', status:'0', time:'2025-11-08 15:40', remark:'系统审计员角色直授'},
+    {id:9,  no:'U0009', username:'sunqi',   nick:'孙琦',       postIds:[11],      roleIds:[2],  phone:'13800000019', email:'sunqi@cloudhub.cn',   sex:'0', status:'0', time:'2025-11-08 15:44', remark:''},
+    {id:10, no:'U0010', username:'xulei',   nick:'徐磊',       postIds:[12],      roleIds:[2],  phone:'13800000020', email:'xulei@cloudhub.cn',   sex:'0', status:'0', time:'2025-11-09 08:30', remark:''},
+    {id:11, no:'U0011', username:'guoyang', nick:'郭洋',       postIds:[13],      roleIds:[3],  phone:'13800000021', email:'guoyang@cloudhub.cn', sex:'0', status:'0', time:'2025-11-09 08:36', remark:'长沙分公司责任人'},
+    {id:12, no:'U0012', username:'wujun',   nick:'吴俊',       postIds:[11],      roleIds:[],  phone:'13800000022', email:'wujun@cloudhub.cn',   sex:'0', status:'1', time:'2025-11-10 13:05', remark:'已停用'}
+  ],
+  menus: [],
+  loginLog: [
+    {id:1,  user:'admin',   post:'云枢科技集团/董事长',       ip:'192.168.1.24', loc:'深圳 · 内网', browser:'Chrome 128', os:'macOS 15',   status:'0', msg:'登录成功',     time:'2026-11-05 12:41:08'},
+    {id:2,  user:'liyan',   post:'研发中心/项目经理',         ip:'192.168.1.87', loc:'深圳 · 内网', browser:'Chrome 128', os:'Windows 11', status:'0', msg:'登录成功',     time:'2026-11-05 12:26:33'},
+    {id:3,  user:'wangtao', post:'产品设计部/产品经理',       ip:'10.20.33.18',  loc:'深圳 · 内网', browser:'Edge 127',   os:'Windows 11', status:'0', msg:'登录成功',     time:'2026-11-05 11:58:47'},
+    {id:4,  user:'sunqi',   post:'市场部/市场专员',           ip:'58.60.12.190', loc:'广东 · 深圳', browser:'Chrome 127', os:'Android 14', status:'0', msg:'登录成功',     time:'2026-11-05 11:32:12'},
+    {id:5,  user:'guest',   post:'—',                        ip:'203.0.113.45', loc:'境外 · 未知', browser:'Chrome 122', os:'Linux',      status:'1', msg:'账号不存在',   time:'2026-11-05 11:15:02'},
+    {id:6,  user:'wujun',   post:'市场部/市场专员',           ip:'58.60.12.190', loc:'广东 · 深圳', browser:'Safari 17',  os:'iOS 18',     status:'1', msg:'账号已停用',   time:'2026-11-05 10:47:55'},
+    {id:7,  user:'zhangqy', post:'深圳总部/总经理',           ip:'192.168.1.52', loc:'深圳 · 内网', browser:'Chrome 128', os:'macOS 15',   status:'0', msg:'登录成功',     time:'2026-11-05 09:58:20'},
+    {id:8,  user:'chenxi',  post:'人力资源部/人事专员',       ip:'10.20.33.6',   loc:'深圳 · 内网', browser:'Edge 127',   os:'Windows 11', status:'0', msg:'登录成功',     time:'2026-11-05 09:31:44'},
+    {id:9,  user:'admin',   post:'—',                        ip:'192.168.1.24', loc:'深圳 · 内网', browser:'Chrome 128', os:'macOS 15',   status:'1', msg:'验证码错误',   time:'2026-11-05 09:12:07'},
+    {id:10, user:'guoyang', post:'长沙分公司/分公司综合岗',   ip:'221.9.44.31',  loc:'湖南 · 长沙', browser:'Edge 126',   os:'Windows 10', status:'0', msg:'登录成功',     time:'2026-11-05 08:56:31'},
+    {id:11, user:'zhaomin', post:'质量保障部/测试工程师',     ip:'10.20.33.22',  loc:'深圳 · 内网', browser:'Chrome 128', os:'Windows 11', status:'0', msg:'登录成功',     time:'2026-11-04 19:42:16'},
+    {id:12, user:'hanmei',  post:'财务部/财务专员',           ip:'10.20.33.9',   loc:'深圳 · 内网', browser:'Chrome 127', os:'Windows 11', status:'0', msg:'登录成功',     time:'2026-11-04 18:30:05'},
+    {id:13, user:'xulei',   post:'财务部/会计',               ip:'221.9.44.58',  loc:'湖南 · 长沙', browser:'Safari 16',  os:'macOS 14',   status:'0', msg:'登录成功',     time:'2026-11-04 17:20:41'},
+    {id:14, user:'zhangqy', post:'深圳总部/总经理',           ip:'192.168.1.52', loc:'深圳 · 内网', browser:'Chrome 128', os:'macOS 15',   status:'0', msg:'切换身份登录', time:'2026-11-04 15:06:12'},
+    {id:15, user:'zhoulin', post:'运维部/运维工程师',         ip:'10.20.33.30',  loc:'深圳 · 内网', browser:'Edge 127',   os:'Windows 11', status:'1', msg:'密码错误',     time:'2026-11-04 14:22:38'},
+    {id:16, user:'liyan',   post:'研发中心/项目经理',         ip:'192.168.1.87', loc:'深圳 · 内网', browser:'Chrome 128', os:'Windows 11', status:'0', msg:'登录成功',     time:'2026-11-04 09:03:27'},
+    {id:17, user:'chenxi',  post:'人力资源部/人事专员',       ip:'10.20.33.6',   loc:'深圳 · 内网', browser:'Edge 127',   os:'Windows 11', status:'0', msg:'登录成功',     time:'2026-11-03 20:15:44'},
+    {id:18, user:'admin',   post:'云枢科技集团/董事长',       ip:'192.168.1.24', loc:'深圳 · 内网', browser:'Chrome 128', os:'macOS 15',   status:'0', msg:'登录成功',     time:'2026-11-03 08:44:09'},
+    {id:19, user:'sunqi',   post:'市场部/市场专员',           ip:'58.60.12.190', loc:'广东 · 深圳', browser:'Chrome 127', os:'Android 14', status:'1', msg:'密码错误',     time:'2026-11-03 08:12:33'},
+    {id:20, user:'guoyang', post:'长沙分公司/分公司综合岗',   ip:'221.9.44.31',  loc:'湖南 · 长沙', browser:'Edge 126',   os:'Windows 10', status:'0', msg:'登录成功',     time:'2026-11-02 18:04:47'},
+    {id:21, user:'hanmei',  post:'财务部/财务专员',           ip:'10.20.33.9',   loc:'深圳 · 内网', browser:'Chrome 127', os:'Windows 11', status:'0', msg:'登录成功',     time:'2026-10-31 16:38:52'},
+    {id:22, user:'wangtao', post:'—',                        ip:'113.87.20.61', loc:'广东 · 广州', browser:'Chrome 126', os:'Windows 11', status:'1', msg:'密码错误',     time:'2026-10-27 10:02:19'}
+  ]
+};
+
+/* 生成菜单与动作 */
+DB.menus.push({id:1000, parentId:0, name:'系统管理', type:'M', path:'system', component:'', perms:'', icon:'settings', order:1, status:'0', time:'2025-11-02 09:00'});
+const MENU_ICON = {1000:'settings', 1001:'users', 1002:'building', 1004:'shield', 1005:'menu', 1006:'key', 1007:'log'};
+MENU_SPEC.forEach((m, i) => {
+  DB.menus.push({id:m.id, parentId:1000, name:m.name, type:'C', path:m.path, component:m.comp, perms:'system:' + m.key + ':list', icon:MENU_ICON[m.id] || '', order:i+1, status:'0', time:'2025-11-02 09:02'});
+  m.btns.forEach((b, j) => {
+    DB.menus.push({id:b[2] || Number(String(m.id) + (j+1)), parentId:m.id, name:b[0], type:'F', path:'', component:'', perms:b[3] || ('system:' + m.key + ':' + b[1]), icon:'', order:j+1, status:'0', time:'2025-11-02 09:10'});
+  });
+});
+
+/* 角色权限 */
+const ROLE_MENUS = {
+  1: DB.menus.map(m => m.id),
+  2: [1000,1001,10011],
+  3: [1000,1001,10011,10013,10016,10017,1002,10021,10031,1004,10041],
+  4: [1000,1001,10011,10017,1006,10061],
+  5: [1000,1001,10011,10012,10013,10015,10017,1002,10021,10022,10023,10025],
+  6: [1000,1001,10011,10017,1002,10021,10031,1004,10041,1006,10061,1007,10071,10072]
+};
+DB.roles.forEach(r => r.menuIds = (ROLE_MENUS[r.id] || []).slice());
+
+/* 岗位 / 组织直接权限：直接授权菜单与动作，不经角色（角色仅授予用户） */
+DB.posts.forEach(p => {
+  p.menuIds = Array.from(new Set((p.roleIds || []).reduce((a, r) => a.concat(ROLE_MENUS[r] || []), [])));
+  delete p.roleIds;
+});
+DB.orgMenus = DB.orgRoles.map(x => ({orgId:x.orgId, menuIds:(ROLE_MENUS[x.roleId] || []).slice()}));
+delete DB.orgRoles;
+
+const PAGE_META = {
+  dashboard:{crumb:'概览 / 工作台'},
+  org:{crumb:'系统权限 / 组织管理'},
+  user:{crumb:'系统权限 / 用户管理'},
+  role:{crumb:'系统权限 / 角色管理'},
+  menu:{crumb:'系统权限 / 菜单管理'},
+  perm:{crumb:'系统权限 / 权限管理'},
+  log:{crumb:'系统权限 / 系统日志'}
+};
+const collapsedOrg = new Set();
+const collapsedMenu = new Set();
+const state = {orgSel:101, postSel:0, roleSel:3, postFold:new Set()};
+/* =========================================================
+   工具
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const orgById = id => DB.orgs.find(o => o.id === id);
+const postById = id => DB.posts.find(p => p.id === id);
+const roleById = id => DB.roles.find(r => r.id === id);
+const menuById = id => DB.menus.find(m => m.id === id);
+const orgName = id => (orgById(id) || {name:'-'}).name;
+const postName = id => (postById(id) || {name:'-'}).name;
+
+function orgPath(id){
+  const arr = []; let cur = orgById(id);
+  while(cur){ arr.unshift(cur.name); const pid = cur.parentId; cur = orgById(pid); }
+  return arr.join(' / ');
+}
+function orgChain(id){
+  const arr = []; let cur = orgById(id);
+  while(cur){ arr.push(cur.id); cur = orgById(cur.parentId); }
+  return arr;
+}
+function orgDescendants(id){
+  const out = [id];
+  const walk = pid => DB.orgs.filter(o => o.parentId === pid).forEach(o => { out.push(o.id); walk(o.id); });
+  walk(id);
+  return out;
+}
+function orgPosts(id){ return DB.posts.filter(p => p.orgId === id && p.status === '0'); }
+function headcount(orgId){
+  const pids = orgPosts(orgId).map(p => p.id);
+  const s = new Set();
+  DB.users.forEach(u => { if(u.status === '0' && u.postIds.some(x => pids.includes(x))) s.add(u.id); });
+  return s.size;
+}
+function userPermInfo(u){
+  const direct = u.roleIds.slice();
+  const postM = new Set(), orgM = new Set();
+  u.postIds.forEach(pid => {
+    const p = postById(pid); if(!p) return;
+    (p.menuIds || []).forEach(m => postM.add(m));
+    orgChain(p.orgId).forEach(oid => {
+      DB.orgMenus.forEach(x => { if(x.orgId === oid) (x.menuIds || []).forEach(m => orgM.add(m)); });
+    });
+  });
+  return {direct:direct, postM:Array.from(postM), orgM:Array.from(orgM)};
+}
+function menuGroupSummary(ids){
+  return permMenus(0).map(t => {
+    const ds = [t.id].concat(permDescendants(t.id));
+    const n = ids.filter(i => ds.indexOf(i) >= 0).length;
+    return n ? t.name + ' ' + n + ' 项' : '';
+  }).filter(Boolean).join('、');
+}
+function rolesText(ids){
+  return ids.map(i => (roleById(i) || {}).name).filter(Boolean).join('、');
+}
+function tags(ids, cls){
+  const names = ids.map(i => (roleById(i) || {}).name).filter(Boolean);
+  return names.length ? names.map(n => '<span class="tag ' + (cls || 'tag-blue') + '">' + n + '</span>').join(' ') : '<span class="muted">无</span>';
+}
+function toast(msg, type){
+  const el = document.createElement('div');
+  el.className = 'tst' + (type === 'ok' ? ' ok' : '');
+  el.textContent = msg;
+  $('#toast').appendChild(el);
+  setTimeout(() => { el.style.opacity = 0; el.style.transition = '.25s'; setTimeout(() => el.remove(), 260); }, 2200);
+}
+function table(headers, rows){
+  const body = rows.map(r => '<tr>' + (Array.isArray(r) ? r.map(c => '<td>' + c + '</td>').join('') : '<td>' + r + '</td>') + '</tr>').join('');
+  return '<table class="tbl"><thead><tr>' + headers.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' +
+    (body || '<tr><td colspan="' + headers.length + '"><div class="empty">暂无数据</div></td></tr>') + '</tbody></table>';
+}
+function openModal(o){
+  $('#modalRoot').innerHTML = '<div class="mask"><div class="modal" style="width:' + (o.width || 640) + 'px">' +
+    '<div class="modal-head"><b>' + o.title + '</b><span class="x" onclick="closeModal()">✕</span></div>' +
+    '<div class="modal-body">' + o.body + '</div>' +
+    '<div class="modal-foot">' + (o.footer || '<button class="btn" onclick="closeModal()">关闭</button>') + '</div>' +
+    '</div></div>';
+  return $('#modalRoot').firstElementChild;
+}
+function closeModal(){ $('#modalRoot').innerHTML = ''; }
+
+/* 登录 */
+function doLogin(){
+  const u = $('#lgUser').value.trim(), p = $('#lgPwd').value.trim();
+  if(!u || !p){ toast('请输入账号和密码'); return; }
+  if(u !== 'admin' || p !== 'admin123'){ toast('账号或密码错误（演示：admin / admin123）'); return; }
+  $('#loginScreen').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  renderAll();
+  toast('登录成功，欢迎回来', 'ok');
+}
+function logout(){
+  $('#app').classList.add('hidden');
+  $('#loginScreen').classList.remove('hidden');
+  $('#userMenu').classList.remove('open');
+  toast('已退出登录');
+}
+function toggleUserMenu(e){ e.stopPropagation(); $('#userMenu').classList.toggle('open'); }
+document.addEventListener('click', () => { const m = $('#userMenu'); if(m) m.classList.remove('open'); });
+
+function go(page){
+  $$('.page').forEach(p => p.classList.toggle('hidden', p.dataset.page !== page));
+  $$('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
+  const c = PAGE_META[page].crumb.split(' / ');
+  $('#crumb').innerHTML = c[0] + ' / <b>' + c[1] + '</b>';
+  $('#content').scrollTop = 0;
+  if(page === 'dashboard') renderDashboard();
+  if(page === 'perm'){ permLoadDraft(); renderPerm(); }
+  if(page === 'log') renderLogs();
+}
+
+/* =========================================================
+   工作台
+   ========================================================= */
+function renderDashboard(){
+  const activeUsers = DB.users.filter(u => u.status === '0').length;
+  const resp = DB.orgs.filter(o => o.leaderPostId).length;
+  $('#stats').innerHTML = [
+    ['组织数量', DB.orgs.length, '3 级组织树'],
+    ['岗位数量', DB.posts.length, '责任岗位 ' + resp + ' 个'],
+    ['用户数量', DB.users.length, '在岗 ' + activeUsers + ' · 停用 ' + (DB.users.length - activeUsers)],
+    ['角色数量', DB.roles.length, '角色仅授予用户']
+  ].map(s => '<div class="stat"><span>' + s[0] + '</span><b>' + s[1] + '</b><em>' + s[2] + '</em></div>').join('');
+
+  const list = DB.orgs.map(o => ({name:o.name, n:headcount(o.id)})).filter(x => x.n > 0).sort((a,b) => b.n - a.n).slice(0, 8);
+  const max = Math.max.apply(null, list.map(x => x.n).concat([1]));
+  $('#orgBars').innerHTML = list.map(x =>
+    '<div class="bar-row"><span class="nm">' + x.name + '</span>' +
+    '<span class="bar-track"><span class="bar-fill" style="width:' + Math.round(x.n / max * 100) + '%"></span></span>' +
+    '<span class="vl">' + x.n + '</span></div>').join('');
+
+  $('#loginLog').innerHTML = table(['账号','登录岗位','IP 地址','登录地点','浏览器 / 系统','状态','登录时间'], DB.loginLog.slice(0, 6).map(l => [
+    '<b>' + l.user + '</b>',
+    '<span class="cell-sub" style="margin:0;color:#5b6676">' + l.post + '</span>',
+    '<span class="mono">' + l.ip + '</span>', l.loc, l.browser + ' · ' + l.os,
+    l.status === '0' ? '<span class="tag tag-ok">成功</span>' : '<span class="tag tag-red">失败</span>',
+    '<span class="num">' + l.time + '</span>'
+  ]));
+}
+
+/* =========================================================
+   系统日志（登录日志）
+   ========================================================= */
+const LOG_TODAY = '2026-11-05';   /* 演示用固定“今天”，与种子数据对齐 */
+const logState = {page:1, size:8};
+function logDaysAgo(t){
+  const d = new Date(t.slice(0,10).replace(/-/g,'/'));
+  const n = new Date(LOG_TODAY.replace(/-/g,'/'));
+  return Math.round((n - d) / 86400000);
+}
+function logFiltered(){
+  const kw = ($('#lKw').value || '').trim().toLowerCase();
+  const st = $('#lStatus').value;
+  const rg = Number($('#lRange').value || 0);
+  return DB.loginLog.filter(l => {
+    if(st && l.status !== st) return false;
+    if(rg && logDaysAgo(l.time) >= rg) return false;
+    if(kw && [l.user, l.ip, l.loc, l.post, l.msg, l.browser, l.os].join(' ').toLowerCase().indexOf(kw) < 0) return false;
+    return true;
+  }).sort((a,b) => a.time < b.time ? 1 : -1);
+}
+function renderLogs(){
+  if(!$('#logTbl')) return;
+  const today = DB.loginLog.filter(l => logDaysAgo(l.time) === 0);
+  const week  = DB.loginLog.filter(l => logDaysAgo(l.time) < 7);
+  const okN = today.filter(l => l.status === '0').length, badN = today.length - okN;
+  const uniq = new Set(week.map(l => l.user)).size;
+  $('#logSum').innerHTML = [
+    ['ls',     'log',    '今日登录',    today.length, '次'],
+    ['ls ok',  'lock',   '今日成功',    okN,          '次'],
+    ['ls bad', 'shield', '今日失败',    badN,         '次'],
+    ['ls',     'users',  '近 7 天账号', uniq,         '个']
+  ].map(s => '<div class="' + s[0] + '"><i>' + iconSvg(s[1], 17) + '</i><div><span>' + s[2] + '</span>' +
+    '<b>' + s[3] + ' <em style="font-style:normal;font-size:11.5px;color:var(--text-3);font-weight:400">' + s[4] + '</em></b></div></div>').join('');
+
+  const all = logFiltered(), total = all.length, size = logState.size;
+  const pages = Math.max(1, Math.ceil(total / size));
+  logState.page = Math.min(Math.max(1, logState.page), pages);
+  const cur = all.slice((logState.page - 1) * size, logState.page * size);
+
+  $('#logTbl').innerHTML = table(['账号','登录岗位','IP 地址','登录地点','浏览器 / 系统','结果','登录时间','操作'], cur.map(l => [
+    '<b>' + l.user + '</b>',
+    '<span class="cell-sub" style="margin:0">' + (l.post || '—') + '</span>',
+    '<span class="mono">' + l.ip + '</span>',
+    l.loc,
+    '<span class="cell-sub" style="margin:0">' + l.browser + '</span><span class="cell-sub" style="margin:0;color:#8b96a8">' + l.os + '</span>',
+    (l.status === '0' ? '<span class="tag tag-ok">成功</span>' : '<span class="tag tag-red">失败</span>') + '<span class="log-msg">' + l.msg + '</span>',
+    '<span class="num">' + l.time + '</span>',
+    '<span class="op"><button class="btn-text" onclick="logDetail(' + l.id + ')">详情</button></span>'
+  ]));
+
+  $('#logCount').innerHTML = '共 <b>' + total + '</b> 条' + (total ? '，第 ' + logState.page + ' / ' + pages + ' 页' : '');
+  let p = '<a class="' + (logState.page === 1 ? 'dis' : '') + '"' + (logState.page === 1 ? '' : ' onclick="logGo(' + (logState.page - 1) + ')"') + '>上一页</a>';
+  for(let i = 1; i <= pages; i++) p += '<a class="' + (i === logState.page ? 'on' : '') + '" onclick="logGo(' + i + ')">' + i + '</a>';
+  p += '<a class="' + (logState.page === pages ? 'dis' : '') + '"' + (logState.page === pages ? '' : ' onclick="logGo(' + (logState.page + 1) + ')"') + '>下一页</a>';
+  $('#logPager').innerHTML = p;
+}
+function logGo(n){ logState.page = n; renderLogs(); }
+function resetLogFilter(){
+  $('#lKw').value = ''; $('#lStatus').value = ''; $('#lRange').value = '7';
+  logState.page = 1; renderLogs(); toast('筛选条件已重置');
+}
+function logDetail(id){
+  const l = DB.loginLog.find(x => x.id === id); if(!l) return;
+  openModal({
+    title:'登录日志详情',
+    width:620,
+    body:'<div class="kv">' +
+      '<span>登录账号</span><b>' + l.user + '</b>' +
+      '<span>登录岗位</span><b>' + (l.post || '—') + '</b>' +
+      '<span>IP 地址</span><b class="mono">' + l.ip + '</b>' +
+      '<span>登录地点</span><b>' + l.loc + '</b>' +
+      '<span>浏览器</span><b>' + l.browser + '</b>' +
+      '<span>操作系统</span><b>' + l.os + '</b>' +
+      '<span>登录结果</span><b>' + (l.status === '0' ? '<span class="tag tag-ok">成功</span>' : '<span class="tag tag-red">失败</span>') + '</b>' +
+      '<span>提示消息</span><b>' + l.msg + '</b>' +
+      '<span>登录时间</span><b>' + l.time + '</b>' +
+    '</div>',
+    footer:'<button class="btn" onclick="closeModal()">关闭</button>' +
+      '<button class="btn btn-primary" onclick="logFilterUser(\'' + l.user + '\')">查看该账号日志</button>'
+  });
+}
+function logFilterUser(u){
+  closeModal(); go('log');
+  $('#lKw').value = u; $('#lRange').value = ''; logState.page = 1; renderLogs();
+}
+function exportLogs(){
+  toast('已导出 ' + logFiltered().length + ' 条登录日志（logininfor.xlsx）', 'ok');
+}
+function confirmCleanLogs(){
+  openModal({
+    title:'清空登录日志',
+    width:520,
+    body:'<div class="note" style="margin:0"><i>!</i><span>将清空 <b>' + DB.loginLog.length + '</b> 条登录日志，操作不可恢复。生产环境一般保留审计日志并配置归档策略。</span></div>',
+    footer:'<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="cleanLogs()">确认清空</button>'
+  });
+}
+function cleanLogs(){
+  const n = DB.loginLog.length;
+  DB.loginLog = []; logState.page = 1;
+  closeModal(); renderLogs(); toast('已清空 ' + n + ' 条登录日志');
+}
+
+/* =========================================================
+   组织管理
+   ========================================================= */
+function toggleAllOrg(){
+  if(collapsedOrg.size){ collapsedOrg.clear(); }
+  else { DB.orgs.filter(o => DB.orgs.some(c => c.parentId === o.id)).forEach(o => collapsedOrg.add(o.id)); }
+  renderOrgs(); renderOrgTree(); renderPosts();
+}
+function flatOrgs(){
+  const out = [];
+  const walk = (pid, level) => DB.orgs.filter(o => o.parentId === pid).sort((a,b) => a.order - b.order).forEach(o => {
+    const kids = DB.orgs.filter(c => c.parentId === o.id);
+    out.push(Object.assign({}, o, {level:level, hasChild:kids.length > 0}));
+    if(kids.length && !collapsedOrg.has(o.id)) walk(o.id, level + 1);
+  });
+  walk(0, 0);
+  return out;
+}
+function renderOrgs(){ renderOrgTree(); }
+function toggleOrgNode(id){
+  if(collapsedOrg.has(id)) collapsedOrg.delete(id); else collapsedOrg.add(id);
+  renderOrgTree();
+}
+function openOrgForm(id, parentId){
+  const o = id ? orgById(id) : {id:0, name:'', code:'', order:1, leaderPostId:null, status:'0', parentId:parentId || 100};
+  const parents = DB.orgs.map(x => '<option value="' + x.id + '"' + (x.id === o.parentId ? ' selected' : '') + '>' + orgPath(x.id) + '</option>').join('');
+  openModal({
+    title: id ? '修改组织' : '新建组织',
+    width: 700,
+    body:'<div class="form-grid">' +
+      '<div class="fi"><label>上级组织</label><select class="ipt" id="oParent">' + parents + '</select></div>' +
+      '<div class="fi"><label>组织名称<i>*</i></label><input class="ipt" id="oName" value="' + o.name + '"></div>' +
+      '<div class="fi"><label>组织编码</label><input class="ipt" id="oCode" value="' + o.code + '" placeholder="留空自动生成"></div>' +
+      '<div class="fi"><label>显示顺序</label><input class="ipt" id="oOrder" value="' + o.order + '"></div>' +
+      '<div class="fi"><label>状态</label><select class="ipt" id="oSt"><option value="0"' + (o.status === '0' ? ' selected' : '') + '>正常</option><option value="1"' + (o.status === '1' ? ' selected' : '') + '>停用</option></select></div>' +
+      '<div class="fi full"><div class="form-tip">保存后系统自动生成「默认岗位」（名称取系统参数中的默认岗位名），并写入 ancestors 用于组织树与数据权限的子树计算。</div></div>' +
+    '</div>',
+    footer:'<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="saveOrg(' + (id || 0) + ')">确定</button>'
+  });
+}
+function saveOrg(id){
+  const name = $('#oName').value.trim();
+  if(!name){ toast('组织名称不能为空'); return; }
+  const parentId = Number($('#oParent').value);
+  const data = {
+    name:name, parentId:parentId,
+    code:$('#oCode').value.trim() || ('ZZ' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '0001'),
+    order:Number($('#oOrder').value) || 0, status:$('#oSt').value
+  };
+  if(id){ Object.assign(orgById(id), data); toast('组织已更新', 'ok'); }
+  else {
+    const nid = Math.max.apply(null, DB.orgs.map(o => o.id)) + 1;
+    data.level = (orgById(parentId) ? orgById(parentId).level : 0) + 1;
+    data.id = nid; data.time = '2026-10-30 15:50'; data.leaderPostId = null;
+    DB.orgs.push(data);
+    const pid = Math.max.apply(null, DB.posts.map(p => p.id)) + 1;
+    DB.posts.push({id:pid, orgId:nid, parentId:0, code:'GW' + nid, name:'默认岗位', sort:1, status:'0', menuIds:[1000,1001,10011], time:'2026-10-30 15:50'});
+    toast('组织创建成功，已自动生成默认岗位', 'ok');
+  }
+  closeModal(); renderOrgs(); renderOrgTree(); renderPosts(); renderDashboard();
+}
+function openLeaderForm(id){
+  const o = orgById(id);
+  const posts = DB.posts.filter(p => p.orgId === id);
+  openModal({
+    title:'设置责任岗位 · ' + o.name,
+    width:620,
+    body:'<div class="form-grid">' +
+      '<div class="fi full"><label>责任岗位（每个组织唯一）</label><select class="ipt" id="ldPost">' +
+        (posts.length ? posts.map(p => '<option value="' + p.id + '"' + (o.leaderPostId === p.id ? ' selected' : '') + '>' + p.name + '</option>').join('') : '<option value="">该组织暂无岗位</option>') +
+      '</select></div>' +
+      '<div class="fi full"><div class="form-tip">责任岗位只能有一个；设置后该岗位的任职人即组织责任人，可接收流程审批与组织级通知。</div></div>' +
+    '</div>',
+    footer:'<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="saveLeader(' + id + ')">确定</button>'
+  });
+}
+function saveLeader(id){
+  const o = orgById(id);
+  const pid = Number($('#ldPost').value);
+  o.leaderPostId = pid || null;   /* 责任岗位唯一来源，岗位表不再冗余标记 */
+  closeModal(); renderOrgs(); renderPosts(); toast('责任岗位已更新', 'ok');
+}
+function delOrg(id){
+  const o = orgById(id);
+  const hasChild = DB.orgs.some(x => x.parentId === id);
+  const hasPost = DB.posts.some(p => p.orgId === id);
+  openModal({
+    title:'删除组织',
+    body:'<p style="margin:0 0 6px">确认删除 <b>' + o.name + '</b> 吗？</p>' +
+      (hasChild || hasPost ? '<div class="form-tip" style="color:#b45309">该组织下存在' + (hasChild ? '子组织' : '') + (hasChild && hasPost ? '与' : '') + (hasPost ? '岗位' : '') + '，需先清理后再删除。</div>' : '<div class="form-tip">逻辑删除：del_flag 置为 2。</div>'),
+    footer:'<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="confirmDelOrg(' + id + ',' + (hasChild || hasPost) + ')">确认删除</button>'
+  });
+}
+function confirmDelOrg(id, blocked){
+  if(blocked){ toast('存在子组织或岗位，无法删除'); return; }
+  DB.orgs = DB.orgs.filter(o => o.id !== id);
+  DB.orgMenus = DB.orgMenus.filter(x => x.orgId !== id);
+  if(state.orgSel === id) state.orgSel = 100;
+  closeModal(); renderOrgs(); renderPosts(); renderDashboard(); toast('组织已删除', 'ok');
+}
+
+/* =========================================================
+   岗位管理
+   ========================================================= */
+function renderOrgTree(){
+  const box = $('#orgTree');
+  if(!box) return;
+  let html = '';
+  const walk = (pid, level) => DB.orgs.filter(o => o.parentId === pid).sort((a,b) => a.order - b.order).forEach(o => {
+    const kids = DB.orgs.filter(c => c.parentId === o.id);
+    const n = DB.posts.filter(p => p.orgId === o.id && p.status === '0').length;
+    html += '<div class="tree-node ' + (state.orgSel === o.id ? 'on' : '') + '" style="padding-left:' + (8 + level * 14) + 'px" onclick="pickOrg(' + o.id + ')">' +
+      '<span class="tw" onclick="event.stopPropagation();toggleOrgNode(' + o.id + ')">' + (kids.length ? (collapsedOrg.has(o.id) ? '▸' : '▾') : '') + '</span>' +
+      '<span class="tname">' + o.name + '</span>' +
+      (o.status === '1' ? '<span class="tag tag-off">停用</span>' : '') +
+      (n ? '<span class="cnt">' + n + '</span>' : '') + '</div>';
+    if(kids.length && !collapsedOrg.has(o.id)) walk(o.id, level + 1);
+  });
+  walk(0, 0);
+  box.innerHTML = html;
+  $('#opOrgCnt').textContent = DB.orgs.length + ' 个节点';
+  const sel = orgById(state.orgSel);
+  $('#opOrgActs').innerHTML = sel ?
+    '<button class="btn-text" onclick="openOrgForm(' + sel.id + ')">修改</button>' +
+    '<button class="btn-text" onclick="openOrgForm(0,' + sel.id + ')">新增下级</button>' +
+    '<button class="btn-text" onclick="openLeaderForm(' + sel.id + ')">设责任岗位</button>' +
+    '<button class="btn-text danger" onclick="delOrg(' + sel.id + ')">删除</button>' : '';
+}
+function pickOrg(id){
+  state.orgSel = id; state.postSel = 0;
+  renderOrgTree(); renderPosts();
+}
+/* 岗位树：按 parent_id 构建，只显示本组织岗位；上级岗位不在本组织时该岗位作为根节点 */
+function postTreeRows(oid){
+  const all = DB.posts.filter(p => p.orgId === oid);
+  const inSet = new Set(all.map(p => p.id));
+  const kids = {};
+  all.forEach(p => { if(p.parentId && inSet.has(p.parentId)) (kids[p.parentId] = kids[p.parentId] || []).push(p); });
+  const bySort = (a, b) => (a.sort || 0) - (b.sort || 0) || a.id - b.id;
+  const rows = [], seen = new Set(), skipped = new Set();
+  const markSkip = p => {
+    if(seen.has(p.id) || skipped.has(p.id)) return;
+    skipped.add(p.id);
+    (kids[p.id] || []).forEach(markSkip);
+  };
+  const walk = (p, depth) => {
+    if(seen.has(p.id)) return;
+    seen.add(p.id);
+    const ch = (kids[p.id] || []).slice().sort(bySort);
+    rows.push({p:p, depth:depth, childCount:ch.length});
+    if(state.postFold.has(p.id)) ch.forEach(markSkip);
+    else ch.forEach(c => walk(c, depth + 1));
+  };
+  all.filter(p => !p.parentId || !inSet.has(p.parentId)).sort(bySort).forEach(p => walk(p, 0));
+  all.filter(p => !seen.has(p.id) && !skipped.has(p.id)).sort(bySort).forEach(p => walk(p, 0)); // 环形引用兜底
+  return rows;
+}
+function foldPost(id){
+  if(state.postFold.has(id)) state.postFold.delete(id); else state.postFold.add(id);
+  renderPosts();
+}
+function postHeadcount(pid){ return DB.users.filter(u => u.status === '0' && u.postIds.indexOf(pid) >= 0).length; }
+function pickPost(id){ state.postSel = (state.postSel === id ? 0 : id); renderPosts(); }
+function orgUsersOf(org, sub){
+  const scopeOrgs = sub ? orgDescendants(org.id) : [org.id];
+  return DB.users.filter(u => u.postIds.some(pid => {
+    const p = postById(pid);
+    return p && scopeOrgs.indexOf(p.orgId) >= 0 && (!state.postSel || pid === state.postSel);
+  }));
+}
+function orgUserTable(users){
+  const kw = ($('#opKw') ? $('#opKw').value : '').trim().toLowerCase();
+  const list = users.filter(u => !kw || u.username.toLowerCase().indexOf(kw) >= 0 || u.nick.toLowerCase().indexOf(kw) >= 0 || (u.phone || '').indexOf(kw) >= 0);
+  return table(['账号','姓名','手机','本组织岗位','状态'], list.map(u => {
+    const ps = u.postIds.map(postById).filter(p => p && p.orgId === state.orgSel);
+    return [
+      '<b>' + u.username + '</b>',
+      u.nick,
+      '<span class="mono">' + (u.phone || '-') + '</span>',
+      ps.length ? ps.map(p => p.name).join('、') : '<span class="muted">-</span>',
+      u.status === '0' ? '<span class="tag tag-ok">正常</span>' : '<span class="tag tag-off">停用</span>'
+    ];
+  }));
+}
+function renderOrgUsers(){
+  const org = orgById(state.orgSel);
+  if(!org) return;
+  const sub = $('#opSub') ? $('#opSub').checked : false;
+  $('#opUserTbl').innerHTML = orgUserTable(orgUsersOf(org, sub));
+}
+function renderPosts(){
+  const org = orgById(state.orgSel);
+  $('#opPostTitle').textContent = '岗位' + (org ? ' · ' + org.name : '');
+  const rows = org ? postTreeRows(org.id) : [];
+  $('#opPosts').innerHTML = rows.length ? rows.map(row => {
+    const p = row.p, hc = postHeadcount(p.id), folded = state.postFold.has(p.id);
+    return '<div class="tree-node' + (state.postSel === p.id ? ' on' : '') + '" style="padding-left:' + (8 + row.depth * 14) + 'px" onclick="pickPost(' + p.id + ')">' +
+      '<span class="tw"' + (row.childCount ? ' onclick="event.stopPropagation();foldPost(' + p.id + ')"' : '') + '>' + (row.childCount ? (folded ? '▸' : '▾') : '') + '</span>' +
+      '<span class="tname">' + p.name + '</span>' + postTag(p) +
+      '<span class="cnt">在岗 ' + hc + '</span></div>';
+  }).join('') : '<div class="empty">该组织暂无岗位，点击右上角「+ 新增岗位」</div>';
+  const sel = state.postSel ? postById(state.postSel) : null;
+  $('#opPostActs').innerHTML = sel ?
+    '<button class="btn-text" onclick="openPostForm(' + sel.id + ')">修改</button>' +
+    '<button class="btn-text danger" onclick="delPost(' + sel.id + ')">删除</button>' : '';
+  renderOrgRight();
+}
+function renderOrgRight(){
+  const org = orgById(state.orgSel);
+  const meta = $('#opRightMeta'), box = $('#opRight');
+  if(!box) return;
+  if(!org){ box.innerHTML = '<div class="empty">请先选择组织</div>'; if(meta) meta.textContent = ''; return; }
+  const sub = $('#opSub') ? $('#opSub').checked : false;
+  const users = orgUsersOf(org, sub);
+  if(meta) meta.textContent = (sub ? '含下级 ' : '') + users.length + ' 人';
+  box.innerHTML =
+    '<div class="op-kw">' +
+      '<input class="ipt" id="opKw" placeholder="账号 / 姓名 / 手机" oninput="renderOrgUsers()">' +
+      '<label class="ck"><input type="checkbox" id="opSub"' + (sub ? ' checked' : '') + ' onchange="renderOrgRight()">含下级组织</label>' +
+      (state.postSel ? '<span class="tag tag-blue">岗位：' + postName(state.postSel) + ' <span style="cursor:pointer" onclick="pickPost(' + state.postSel + ')">✕</span></span>' : '') +
+    '</div>' +
+    '<div id="opUserTbl">' + orgUserTable(users) + '</div>';
+}
+function openPostForm(id){
+  const p = id ? postById(id) : {id:0, orgId:state.orgSel || 103, parentId:0, name:'', code:'', sort:DB.posts.length + 1, status:'0', remark:''};
+  const leaderOn = id ? isLeaderPost(p) : false;
+  const orgOpts = DB.orgs.map(o => '<option value="' + o.id + '"' + (o.id === p.orgId ? ' selected' : '') + '>' + orgPath(o.id) + '</option>').join('');
+  const ex = new Set([p.id]);
+  (function walkDown(pid){ DB.posts.filter(x => x.parentId === pid).forEach(x => { ex.add(x.id); walkDown(x.id); }); })(p.id);
+  const postOpts = '<option value="0">无（岗位序列起点）</option>' + DB.posts.filter(x => !ex.has(x.id))
+    .map(x => '<option value="' + x.id + '"' + (x.id === p.parentId ? ' selected' : '') + '>' + orgName(x.orgId) + ' / ' + x.name + '</option>').join('');
+  openModal({
+    title: id ? '修改岗位' : '新增岗位',
+    width: 720,
+    body:'<div class="form-grid">' +
+      '<div class="fi"><label>所属组织<i>*</i></label><select class="ipt" id="pfOrg">' + orgOpts + '</select></div>' +
+      '<div class="fi"><label>上级岗位</label><select class="ipt" id="pfParent">' + postOpts + '</select></div>' +
+      '<div class="fi"><label>岗位名称<i>*</i></label><input class="ipt" id="pfName" value="' + p.name + '"></div>' +
+      '<div class="fi"><label>岗位编码</label><input class="ipt" id="pfCode" value="' + p.code + '" placeholder="留空自动生成 GW+日期+序列"></div>' +
+      '<div class="fi"><label>责任岗位</label><select class="ipt" id="pfLeader">' +
+        '<option value="0"' + (!leaderOn ? ' selected' : '') + '>否（普通岗位）</option>' +
+        '<option value="1"' + (leaderOn ? ' selected' : '') + '>是（每组织唯一）</option></select></div>' +
+      '<div class="fi"><label>显示排序</label><input class="ipt" id="pfSort" value="' + p.sort + '"></div>' +
+      '<div class="fi"><label>状态</label><select class="ipt" id="pfSt"><option value="0"' + (p.status === '0' ? ' selected' : '') + '>正常</option><option value="1"' + (p.status === '1' ? ' selected' : '') + '>停用</option></select></div>' +
+      '<div class="fi full"><div class="form-tip">岗位是用户与组织之间的唯一通道：用户任职该岗位即归属其所属组织，并合并岗位的直授权限。设为责任岗位后，原责任岗位自动让出；「系统生成」标记由新建组织时的默认岗位自动携带，表单不维护。</div></div>' +
+    '</div>',
+    footer:'<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="savePost(' + (id || 0) + ')">确定</button>'
+  });
+}
+function savePost(id){
+  const name = $('#pfName').value.trim();
+  if(!name){ toast('岗位名称不能为空'); return; }
+  const data = {
+    name:name, orgId:Number($('#pfOrg').value), parentId:Number($('#pfParent').value),
+    code:$('#pfCode').value.trim() || ('GW20261030' + String(DB.posts.length + 1).padStart(3,'0')),
+    isLeader:Number($('#pfLeader').value),
+    sort:Number($('#pfSort').value) || 0, status:$('#pfSt').value
+  };
+  let tid = id;
+  if(id){
+    const p = postById(id);
+    Object.assign(p, data);
+    toast('岗位已更新', 'ok');
+  } else {
+    const nid = Math.max.apply(null, DB.posts.map(p => p.id)) + 1;
+    DB.posts.push(Object.assign({id:nid, menuIds:[], time:'2026-10-30 15:50'}, data));
+    tid = nid;
+    toast('岗位创建成功，可在「权限管理」中配置其权限', 'ok');
+  }
+  const org = orgById(data.orgId);
+  if(org && data.isLeader) org.leaderPostId = tid;
+  else if(org && org.leaderPostId === tid) org.leaderPostId = null;
+  closeModal(); renderPosts(); renderOrgTree(); renderDashboard();
+}
+function delPost(id){
+  const p = postById(id);
+  const hc = DB.users.filter(u => u.postIds.includes(id)).length;
+  openModal({
+    title:'删除岗位',
+    body:'<p style="margin:0 0 6px">确认删除 <b>' + p.name + '</b> 吗？</p>' +
+      '<div class="form-tip">' + (hc ? '该岗位仍有 ' + hc + ' 人在岗，需先调岗后再删除。' : '删除后需同步清理 sys_post_menu / sys_user_post 授权关系。') + '</div>',
+    footer:'<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="confirmDelPost(' + id + ',' + hc + ')">确认删除</button>'
+  });
+}
+function confirmDelPost(id, hc){
+  if(hc){ toast('仍有用户在岗，无法删除'); return; }
+  DB.posts = DB.posts.filter(p => p.id !== id);
+  DB.orgs.forEach(o => { if(o.leaderPostId === id) o.leaderPostId = null; });
+  if(state.postSel === id) state.postSel = 0;
+  closeModal(); renderPosts(); renderOrgTree(); renderDashboard(); toast('岗位已删除', 'ok');
+}
+/* =========================================================
+   用户管理
+   ========================================================= */
+function orgOptions(){
+  let out = '<option value="">全部组织</option>';
+  DB.orgs.slice().sort((a,b) => a.level - b.level || a.order - b.order).forEach(o => {
+    out += '<option value="' + o.id + '">' + orgPath(o.id) + '</option>';
+  });
+  return out;
+}
+function resetUserFilter(){ $('#uKw').value = ''; $('#uOrg').value = ''; $('#uStatus').value = ''; renderUsers(); }
+function renderUsers(){
+  const kw = ($('#uKw') ? $('#uKw').value : '').trim().toLowerCase();
+  const org = $('#uOrg') ? $('#uOrg').value : '';
+  const st = $('#uStatus') ? $('#uStatus').value : '';
+  const orgSet = org ? orgDescendants(Number(org)) : null;
+  const list = DB.users.filter(u => {
+    const posts = u.postIds.map(postById).filter(Boolean);
+    const hit = !kw || u.username.toLowerCase().includes(kw) || u.nick.includes(kw) || u.phone.includes(kw);
+    const inOrg = !orgSet || posts.some(p => orgSet.indexOf(p.orgId) >= 0);
+    return hit && inOrg && (!st || u.status === st);
+  });
+  $('#userTbl').innerHTML = table(['账号','昵称','所属岗位（组织 / 岗位）','直接角色','岗位/组织权限','手机号','状态','操作'], list.map(u => {
+    const info = userPermInfo(u);
+    const postLines = u.postIds.map(pid => {
+      const p = postById(pid); if(!p) return '';
+      return '<span class="cell-sub" style="margin:0;color:#5b6676">' + orgPath(p.orgId) + ' / <b style="color:#1f2937">' + p.name + '</b></span>';
+    }).join('');
+    return [
+      '<b>' + u.username + '</b><span class="cell-sub">' + u.no + '</span>',
+      '<span style="white-space:nowrap">' + u.nick + '</span>',
+      '<div class="stack">' + (postLines || '<span class="muted">未任职</span>') + '</div>',
+      tags(info.direct, 'tag-blue'),
+      '<div class="stack">' +
+        (info.postM.length ? '<span>' + info.postM.length + ' 项岗位权限</span>' : '') +
+        (info.orgM.length ? '<span>' + info.orgM.length + ' 项组织权限</span>' : '') +
+        (!info.postM.length && !info.orgM.length ? '<span class="muted">无</span>' : '') +
+      '</div>',
+      '<span class="mono">' + u.phone + '</span>',
+      u.status === '0' ? '<span class="tag tag-ok">正常</span>' : '<span class="tag tag-off">停用</span>',
+      '<span class="op">' +
+        '<button class="btn-text" onclick="openUserForm(' + u.id + ')">修改</button><span class="sep">|</span>' +
+        '<button class="btn-text" onclick="openTransfer({kind:\'userRole\', id:' + u.id + '})">分配角色</button><span class="sep">|</span>' +
+        '<button class="btn-text" onclick="openUserPerms(' + u.id + ')">查看权限</button><span class="sep">|</span>' +
+        '<button class="btn-text" onclick="resetPwd(' + u.id + ')">重置密码</button><span class="sep">|</span>' +
+        '<button class="btn-text danger" onclick="delUser(' + u.id + ')">删除</button>' +
+      '</span>'
+    ];
+  }));
+  $('#userCount').textContent = '共 ' + list.length + ' 条记录（当前第 1 页）';
+}
+function openUserForm(id){
+  const u = id ? DB.users.find(x => x.id === id) : {id:0, username:'', nick:'', postIds:[4], roleIds:[2], phone:'', email:'', sex:'0', status:'0'};
+  openModal({
+    title: id ? '修改用户 · ' + u.username : '新增用户',
+    width: 740,
+    body:'<div class="form-grid">' +
+      '<div class="fi"><label>登录账号<i>*</i></label><input class="ipt" id="ufName" value="' + u.username + '"></div>' +
+      '<div class="fi"><label>用户昵称<i>*</i></label><input class="ipt" id="ufNick" value="' + u.nick + '"></div>' +
+      '<div class="fi"><label>手机号码</label><input class="ipt" id="ufPhone" value="' + u.phone + '"></div>' +
+      '<div class="fi"><label>邮箱</label><input class="ipt" id="ufEmail" value="' + u.email + '"></div>' +
+      '<div class="fi"><label>性别</label><div class="ckline">' +
+        '<label><input type="radio" name="ufSex" value="0"' + (u.sex === '0' ? ' checked' : '') + '> 男</label>' +
+        '<label><input type="radio" name="ufSex" value="1"' + (u.sex === '1' ? ' checked' : '') + '> 女</label>' +
+      '</div></div>' +
+      '<div class="fi full"><label>任职岗位<i>*</i> <span class="muted">一人可多岗，可跨组织，岗位之间不分主次</span></label>' +
+        '<div id="ufPosts" class="msel-host"></div>' +
+      '</div>' +
+      '<div class="fi full"><label>直接角色 <span class="muted">岗位权限与组织权限直接分配在岗位/组织上，会自动合并进最终权限</span></label>' +
+        '<div id="ufRoles" class="msel-host"></div>' +
+      '</div>' +
+      '<div class="fi full"><label>账号状态</label><div class="ckline">' +
+        '<label><input type="radio" name="ufStatus" value="0"' + (u.status === '0' ? ' checked' : '') + '> 正常</label>' +
+        '<label><input type="radio" name="ufStatus" value="1"' + (u.status === '1' ? ' checked' : '') + '> 停用</label>' +
+      '</div></div>' +
+    '</div>',
+    footer:'<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="saveUser(' + (id || 0) + ')">确定</button>'
+  });
+  mselSetup('#ufPosts',
+    DB.posts.map(p => ({id:p.id, label:p.name, group:orgName(p.orgId)})),
+    u.postIds, '按组织 / 岗位名称搜索', 4);
+  mselSetup('#ufRoles',
+    DB.roles.map(r => ({id:r.id, label:r.name, sub:r.key})),
+    u.roleIds, '搜索角色名称 / 权限字符', 6);
+}
+/* 可搜索多选：已选项收进 chips（超出 maxChips 折叠为 +N），点击「＋ 选择」弹出搜索面板 */
+function mselSetup(sel, items, checked, ph, maxChips){
+  const host = $(sel), max = maxChips || 4;
+  const set = new Set(checked || []);
+  const row = document.createElement('div'); row.className = 'msel';
+  const pop = document.createElement('div'); pop.className = 'msel-pop';
+  pop.innerHTML = '<input class="msel-search" placeholder="' + ph + '"><div class="msel-list"></div>';
+  host.appendChild(row); host.appendChild(pop);
+  const paintList = kw => {
+    kw = (kw || '').trim().toLowerCase();
+    const hit = items.filter(it => !kw || (it.label + ' ' + (it.group || '') + ' ' + (it.sub || '')).toLowerCase().indexOf(kw) >= 0);
+    let html = '', lastG = null;
+    hit.forEach(it => {
+      if(it.group && it.group !== lastG){ html += '<div class="msel-group">' + it.group + '</div>'; lastG = it.group; }
+      const on = set.has(it.id);
+      html += '<div class="msel-item' + (on ? ' on' : '') + '" data-id="' + it.id + '">' +
+        '<span class="ck">' + (on ? '✓' : '') + '</span><span>' + it.label + '</span>' +
+        (it.sub ? '<span class="muted" style="margin-left:auto;font-size:11.5px">' + it.sub + '</span>' : '') + '</div>';
+    });
+    pop.querySelector('.msel-list').innerHTML = html || '<div class="msel-empty">无匹配项</div>';
+    pop.querySelectorAll('.msel-item').forEach(el => el.addEventListener('click', () => {
+      const nid = Number(el.dataset.id);
+      if(set.has(nid)) set.delete(nid); else set.add(nid);
+      el.classList.toggle('on');
+      el.querySelector('.ck').textContent = el.classList.contains('on') ? '✓' : '';
+      paintChips();
+    }));
+  };
+  const paintChips = () => {
+    host.dataset.val = JSON.stringify(Array.from(set));
+    const ids = Array.from(set);
+    row.innerHTML = (ids.length ? '' : '<span class="msel-hint">尚未选择</span>') +
+      ids.slice(0, max).map(id => {
+        const it = items.find(x => x.id === id) || {label:id};
+        return '<span class="msel-chip" data-rm="' + id + '">' + it.label + '<i title="移除">✕</i></span>';
+      }).join('') +
+      (ids.length > max ? '<span class="msel-more">+' + (ids.length - max) + '</span>' : '') +
+      '<span class="msel-btn">＋ 选择</span>';
+    row.querySelectorAll('[data-rm]').forEach(c => c.querySelector('i').addEventListener('click', e => {
+      e.stopPropagation();
+      set.delete(Number(c.dataset.rm));
+      paintChips();
+      paintList(pop.querySelector('.msel-search').value);
+    }));
+  };
+  const togglePop = e => {
+    e.stopPropagation();
+    const open = pop.classList.contains('open');
+    $$('.msel-pop.open').forEach(p => p.classList.remove('open'));
+    if(!open){
+      pop.querySelector('.msel-search').value = '';
+      paintList('');
+      pop.classList.add('open');
+      pop.querySelector('.msel-search').focus();
+    }
+  };
+  row.addEventListener('click', togglePop);
+  pop.addEventListener('click', e => e.stopPropagation());
+  pop.querySelector('.msel-search').addEventListener('input', e => paintList(e.target.value));
+  paintChips();
+}
+document.addEventListener('click', () => $$('.msel-pop.open').forEach(p => p.classList.remove('open')));
+function mselValue(sel){ try { return JSON.parse($(sel).dataset.val || '[]'); } catch(e){ return []; } }
+function saveUser(id){
+  const data = {
+    username:$('#ufName').value.trim(), nick:$('#ufNick').value.trim(),
+    phone:$('#ufPhone').value.trim(),
+    email:$('#ufEmail').value.trim(),
+    sex:(document.querySelector('input[name=ufSex]:checked') || {}).value || '0',
+    status:(document.querySelector('input[name=ufStatus]:checked') || {}).value || '0',
+    postIds:mselValue('#ufPosts'), roleIds:mselValue('#ufRoles')
+  };
+  if(!data.username || !data.nick){ toast('账号与昵称不能为空'); return; }
+  if(!data.postIds.length){ toast('请至少选择一个任职岗位'); return; }
+
+  if(id){ Object.assign(DB.users.find(u => u.id === id), data); toast('用户信息已更新', 'ok'); }
+  else {
+    if(DB.users.some(u => u.username === data.username)){ toast('登录账号已存在'); return; }
+    const nid = Math.max.apply(null, DB.users.map(u => u.id)) + 1;
+    data.id = nid; data.no = 'U' + String(nid).padStart(4, '0'); data.time = '2026-10-30 15:50'; data.remark = '';
+    DB.users.push(data);
+    toast('用户创建成功，已按岗位自动归集组织', 'ok');
+  }
+  closeModal(); renderUsers(); renderDashboard();
+}
+function resetPwd(id){
+  const u = DB.users.find(x => x.id === id);
+  openModal({
+    title:'重置密码 · ' + u.username,
+    body:'<div class="fi"><label>新密码</label><input class="ipt" id="npwd" value="Cloudhub@2026"></div>' +
+         '<div class="form-tip">重置后该用户所有会话立即失效，需使用新密码重新登录。</div>',
+    footer:'<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="closeModal();toast(\'密码已重置\',\'ok\')">确定</button>'
+  });
+}
+function delUser(id){
+  const u = DB.users.find(x => x.id === id);
+  if(u.username === 'admin'){ toast('超级管理员账号不可删除'); return; }
+  openModal({
+    title:'删除用户',
+    body:'<p style="margin:0 0 6px">确认删除用户 <b>' + u.nick + '（' + u.username + '）</b> 吗？</p>' +
+         '<div class="form-tip">逻辑删除：del_flag 置为 2，同时清理 sys_user_post / sys_user_role 关联。</div>',
+    footer:'<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-danger" onclick="confirmDelUser(' + id + ')">确认删除</button>'
+  });
+}
+function confirmDelUser(id){
+  DB.users = DB.users.filter(u => u.id !== id);
+  closeModal(); renderUsers(); renderDashboard(); toast('用户已删除', 'ok');
+}
+
+/* =========================================================
+   查看用户权限（只读：左侧权限来源，右侧权限明细树）
+   ========================================================= */
+const upv = {uid:0, key:'all', closed:new Set()};
+
+function upvSources(u){
+  const info = userPermInfo(u);
+  const all = new Set();
+  info.direct.forEach(rid => (roleById(rid) || {menuIds:[]}).menuIds.forEach(m => all.add(m)));
+  info.postM.forEach(m => all.add(m));
+  info.orgM.forEach(m => all.add(m));
+  const srcs = [{key:'all', name:'全部权限', sub:'角色 ∪ 岗位 ∪ 组织', ids:Array.from(all)}];
+  info.direct.forEach(rid => {
+    const r = roleById(rid); if(!r) return;
+    srcs.push({key:'role:' + rid, name:r.name, sub:'数据范围：' + SCOPE_NAME[r.scope], tag:'用户角色', tagCls:'tag-blue', ids:r.menuIds.slice()});
+  });
+  u.postIds.forEach(pid => {
+    const p = postById(pid); if(!p) return;
+    srcs.push({key:'post:' + pid, name:orgName(p.orgId) + ' / ' + p.name, sub:'岗位直授，覆盖该岗全部在岗人', tag:'岗位权限', tagCls:'tag-warn', ids:(p.menuIds || []).slice()});
+  });
+  const orgSeen = {};
+  u.postIds.forEach(pid => {
+    const p = postById(pid); if(!p) return;
+    orgChain(p.orgId).forEach((oid, idx) => {
+      const om = DB.orgMenus.find(x => x.orgId === oid);
+      if(!om || !om.menuIds.length) return;
+      if(!orgSeen[oid]) orgSeen[oid] = {own:false, via:p.orgId};
+      if(idx === 0) orgSeen[oid].own = true;
+    });
+  });
+  Object.keys(orgSeen).forEach(oid => {
+    const o = orgById(Number(oid)); if(!o) return;
+    const s = orgSeen[oid];
+    srcs.push({key:'org:' + oid, name:o.name, sub:s.own ? '本节点直授，沿组织树向下继承' : '任职组织在其下方，自动继承', tag:'组织权限', tagCls:'tag-violet', ids:DB.orgMenus.find(x => x.orgId === Number(oid)).menuIds.slice()});
+  });
+  return srcs;
+}
+function openUserPerms(uid){
+  const u = DB.users.find(x => x.id === Number(uid));
+  if(!u) return;
+  upv.uid = u.id; upv.key = 'all'; upv.closed = new Set();
+  openModal({
+    title:'查看权限 · ' + u.nick + '（' + u.username + '）',
+    width: 860,
+    body:'<div class="uv">' +
+      '<div class="uv-left" id="uvLeft"></div>' +
+      '<div class="uv-right"><div class="uv-head" id="uvHead"></div>' +
+        '<div class="ptree" id="uvTree" style="max-height:420px"></div>' +
+      '</div></div>' +
+      '<div class="uv-sum" id="uvSum"></div>'
+  });
+  renderUpvLeft();
+  renderUpvRight();
+}
+function upvPick(key){
+  upv.key = key;
+  renderUpvLeft(); renderUpvRight();
+}
+function renderUpvLeft(){
+  const u = DB.users.find(x => x.id === upv.uid);
+  const srcs = upvSources(u);
+  const grpOrder = {'all':0, 'role':1, 'post':2, 'org':3};
+  const grpName = {role:'用户角色', post:'岗位权限', org:'组织权限'};
+  let html = '<div class="uv-title">查看范围</div>';
+  let lastGrp = '';
+  srcs.forEach(s => {
+    const grp = s.key.split(':')[0];
+    if(grp !== 'all' && grp !== lastGrp){
+      html += '<div class="uv-grp">' + grpName[grp] + ' <span class="muted">（' + srcs.filter(x => x.key.indexOf(grp + ':') === 0).length + '）</span></div>';
+      lastGrp = grp;
+    }
+    html += '<div class="uv-src' + (upv.key === s.key ? ' on' : '') + '" onclick="upvPick(\'' + s.key + '\')">' +
+      '<span>' + s.name + '</span><span class="pc">' + s.ids.length + '</span></div>';
+  });
+  $('#uvLeft').innerHTML = html;
+}
+function renderUpvRight(){
+  const u = DB.users.find(x => x.id === upv.uid);
+  const srcs = upvSources(u);
+  const s = srcs.find(x => x.key === upv.key) || srcs[0];
+  const set = new Set(s.ids);
+  $('#uvHead').innerHTML = '<b>' + s.name + '</b>' +
+    (s.tag ? '<span class="tag ' + s.tagCls + '">' + s.tag + '</span>' : '') +
+    '<span class="muted" style="margin-left:auto">' + s.ids.length + ' 项权限</span>' +
+    '<span class="cell-sub">' + s.sub + '</span>';
+  let html = '';
+  permMenus(0).forEach(top => {
+    const rows = permMenus(top.id).map(m => ({m:m, btns:permMenus(m.id).filter(b => set.has(b.id))}))
+      .filter(x => set.has(x.m.id) || x.btns.length);
+    if(!rows.length) return;
+    const ids = [top.id].concat.apply([], rows.map(x => [x.m.id].concat(x.btns.map(b => b.id)))).filter(i => set.has(i));
+    const shut = upv.closed.has(top.id);
+    html += '<div class="pgroup">' +
+      '<div class="prow">' +
+        (permMenus(top.id).length ? '<span class="ptri" onclick="upvToggle(' + top.id + ')">' + (shut ? '▸' : '▾') + '</span>' : '<span class="ptri"></span>') +
+        '<input class="cb" type="checkbox" disabled' + (set.has(top.id) ? ' checked' : '') + '>' +
+        '<span class="pi-name">' + top.name + '</span>' +
+        '<span class="tag tag-off">目录</span>' +
+        '<span class="pc">' + ids.length + ' 项</span>' +
+      '</div>';
+    if(!shut) rows.forEach(x => {
+      html += '<div class="prow" style="padding-left:24px">' +
+        '<input class="cb" type="checkbox" disabled' + (set.has(x.m.id) ? ' checked' : '') + '>' +
+        '<span>' + x.m.name + '</span>' +
+        '<span class="pc">' + (x.m.perms || '') + '</span></div>';
+      x.btns.forEach(b => {
+        html += '<div class="prow" style="padding-left:46px">' +
+          '<input class="cb" type="checkbox" disabled checked>' +
+          '<span>' + b.name + '</span>' +
+          '<span class="pc">' + (b.perms || '') + '</span></div>';
+      });
+    });
+    html += '</div>';
+  });
+  $('#uvTree').innerHTML = html || '<div class="empty">该来源暂无任何权限</div>';
+  const info = userPermInfo(u);
+  $('#uvSum').textContent = '最终权限 = 用户角色 ' + info.direct.length + ' 个角色 ∪ 岗位权限 ' + info.postM.length +
+    ' 项 ∪ 组织权限 ' + info.orgM.length + ' 项，权限点去重后共 ' + new Set([].concat(
+      info.direct.reduce((a, rid) => a.concat((roleById(rid) || {menuIds:[]}).menuIds), []),
+      info.postM, info.orgM)).size + ' 项';
+}
+function upvToggle(id){
+  if(upv.closed.has(id)) upv.closed.delete(id); else upv.closed.add(id);
+  renderUpvRight();
+}
+
+/* =========================================================
+   角色管理（左：角色列表 / 右：角色下用户）
+   ========================================================= */
+function roleUsersOf(rid){ return DB.users.filter(u => u.roleIds.indexOf(rid) >= 0); }
+function selectRole(id){
+  if(!roleById(id)) return;
+  state.roleSel = id;
+  renderRoles();
+}
+function renderRoles(){
+  const kw = ($('#rKw') ? $('#rKw').value : '').trim().toLowerCase();
+  const list = DB.roles.filter(r => !kw || r.name.toLowerCase().indexOf(kw) >= 0 || r.key.toLowerCase().indexOf(kw) >= 0)
+    .sort((a, b) => a.sort - b.sort);
+  if(list.length && !list.some(r => r.id === state.roleSel)) state.roleSel = list[0].id;
+  const cnt = $('#roleCount');
+  if(cnt) cnt.textContent = '共 ' + list.length + ' 个';
+  $('#roleList').innerHTML = list.length ? list.map(r => {
+    const n = roleUsersOf(r.id).length;
+    return '<div class="ritem' + (state.roleSel === r.id ? ' on' : '') + '" onclick="selectRole(' + r.id + ')">' +
+      '<div class="rn"><b>' + r.name + '</b>' +
+        (r.id === 1 ? '<span class="tag tag-warn">内置</span>' : '') +
+        (r.status === '1' ? '<span class="tag tag-off">停用</span>' : '') +
+      '</div>' +
+      '<div class="rk"><em>' + r.key + '</em>' + n + ' 人</div></div>';
+  }).join('') : '<div class="empty">无匹配角色</div>';
+  renderRoleDetail();
+}
+function renderRoleDetail(){
+  const box = $('#roleDetail');
+  if(!box) return;
+  const r = roleById(state.roleSel);
+  if(!r){ box.innerHTML = '<div class="empty" style="padding:40px 12px">请选择左侧角色</div>'; return; }
+  const us = roleUsersOf(r.id);
+  const permN = r.id === 1 ? DB.menus.length : (r.menuIds || []).length;
+  const rows = us.map(u => [
+    '<b>' + u.nick + '</b><span class="cell-sub">' + u.username + '</span>',
+    '<span class="mono">' + (u.phone || '-') + '</span>',
+    u.postIds.map(pid => { const p = postById(pid); return p ? orgName(p.orgId) + ' / ' + p.name : ''; }).filter(Boolean).join('、') || '<span class="muted">-</span>',
+    (function(){
+      const pm = new Set();
+      u.postIds.forEach(pid => { const p = postById(pid); if(p) (p.menuIds || []).forEach(m => pm.add(m)); });
+      return pm.size ? pm.size + ' 项' : '<span class="muted">无</span>';
+    })(),
+    u.status === '0' ? '<span class="tag tag-ok">正常</span>' : '<span class="tag tag-off">停用</span>',
+    '<span class="op"><button class="btn-text danger" onclick="removeRoleUser(' + r.id + ',' + u.id + ')">移除</button></span>'
+  ]);
+  box.innerHTML =
+    '<div class="rd-head">' +
+      '<div style="min-width:0;flex:1">' +
+        '<div class="rn" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+          '<b style="font-size:15px">' + r.name + '</b>' +
+          '<span class="cell-sub mono">' + r.key + '</span>' +
+          (r.status === '0' ? '<span class="tag tag-ok">正常</span>' : '<span class="tag tag-off">停用</span>') +
+        '</div>' +
+        '<div class="rd-meta">' +
+          '<span>数据范围 · <b>' + SCOPE_NAME[r.scope] + '</b></span>' +
+          '<span>菜单权限 · <b>' + permN + '</b> 项</span>' +
+          '<span>角色用户 · <b>' + us.length + '</b> 人</span>' +
+          (r.remark ? '<span>' + r.remark + '</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="op" style="display:flex;align-items:center;gap:2px">' +
+        '<button class="btn-text" onclick="openRoleForm(' + r.id + ')">修改</button>' +
+        (r.id === 1 ? '' : '<span class="sep">|</span><button class="btn-text danger" onclick="delRole(' + r.id + ')">删除</button>') +
+        '<button class="btn btn-primary" style="margin-left:8px" onclick="openTransfer({kind:\'roleUser\', id:' + r.id + '})">+ 添加用户</button>' +
+      '</div>' +
+    '</div>' +
+    (us.length
+      ? '<div class="tbl-wrap">' + table(['用户', '手机号', '所属岗位', '岗位权限', '状态', '操作'], rows) + '</div>'
+      : '<div class="empty" style="padding:40px 12px">该角色下还没有用户，点右上「添加用户」分配</div>') +
+    '<div class="legend" style="border-top:1px solid var(--line-2)"><span>最终权限 = 用户角色权限 ∪ 岗位权限 ∪ 组织权限（组织权限沿组织树向下继承），去重后生效</span></div>';
+}
+function removeRoleUser(rid, uid){
+  const u = DB.users.find(x => x.id === uid);
+  if(!u) return;
+  u.roleIds = u.roleIds.filter(x => x !== rid);
+  renderRoles(); renderUsers();
+  toast('已移除「' + u.nick + '」的该角色', 'ok');
+}
+function delRole(id){
+  const r = roleById(id);
+  if(!r) return;
+  if(id === 1){ toast('超级管理员不可删除'); return; }
+  const n = roleUsersOf(id).length;
+  if(n){ toast('「' + r.name + '」下还有 ' + n + ' 名用户，请先移除后再删除'); return; }
+  DB.roles = DB.roles.filter(x => x.id !== id);
+  if(state.roleSel === id) state.roleSel = DB.roles.length ? DB.roles[0].id : 0;
+  renderRoles(); renderUsers();
+  toast('角色「' + r.name + '」已删除', 'ok');
+}
+function openRoleForm(id){
+  const r = id ? roleById(id) : {id:0, name:'', key:'', sort:DB.roles.length + 1, scope:'5', status:'0', remark:''};
+  openModal({
+    title: id ? '修改角色' : '新增角色',
+    width: 680,
+    body:'<div class="form-grid">' +
+      '<div class="fi"><label>角色名称<i>*</i></label><input class="ipt" id="rfName" value="' + r.name + '"></div>' +
+      '<div class="fi"><label>权限字符<i>*</i></label><input class="ipt" id="rfKey" value="' + r.key + '" placeholder="如 manager"></div>' +
+      '<div class="fi"><label>数据范围</label><select class="ipt" id="rfScope">' +
+        Object.keys(SCOPE_NAME).map(k => '<option value="' + k + '"' + (r.scope === k ? ' selected' : '') + '>' + SCOPE_NAME[k] + '</option>').join('') + '</select></div>' +
+      '<div class="fi"><label>显示排序</label><input class="ipt" id="rfSort" value="' + r.sort + '"></div>' +
+      '<div class="fi"><label>角色状态</label><select class="ipt" id="rfSt"><option value="0"' + (r.status === '0' ? ' selected' : '') + '>正常</option><option value="1"' + (r.status === '1' ? ' selected' : '') + '>停用</option></select></div>' +
+      '<div class="fi full"><label>备注</label><textarea class="ipt" id="rfRemark" rows="2">' + (r.remark || '') + '</textarea></div>' +
+      '<div class="fi full"><div class="form-tip">角色仅授予用户；菜单权限与数据范围统一在「权限管理 → 角色权限」中配置。岗位与组织的直授权限同样在「权限管理 → 岗位 / 组织权限」中配置。</div></div>' +
+    '</div>',
+    footer:'<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="saveRole(' + (id || 0) + ')">确定</button>'
+  });
+}
+function saveRole(id){
+  const name = $('#rfName').value.trim(), key = $('#rfKey').value.trim();
+  if(!name || !key){ toast('名称与权限字符不能为空'); return; }
+  const data = {name:name, key:key, scope:$('#rfScope').value, sort:Number($('#rfSort').value) || 0, status:$('#rfSt').value, remark:$('#rfRemark').value.trim()};
+  if(id){ Object.assign(roleById(id), data); toast('角色已更新', 'ok'); }
+  else {
+    const nid = Math.max.apply(null, DB.roles.map(r => r.id)) + 1;
+    DB.roles.push(Object.assign({id:nid, time:'2026-10-30 15:50', menuIds:[]}, data));
+    toast('角色创建成功，请到「权限管理」配置菜单权限', 'ok');
+  }
+  closeModal(); renderRoles(); renderDashboard();
+}
+
+/* =========================================================
+   菜单管理
+   ========================================================= */
+function toggleAllMenu(){
+  if(collapsedMenu.size){ collapsedMenu.clear(); }
+  else { DB.menus.filter(m => DB.menus.some(c => c.parentId === m.id)).forEach(m => collapsedMenu.add(m.id)); }
+  renderMenus();
+  renderPerm();
+}
+function flatMenus(){
+  const out = [];
+  const walk = (pid, level) => DB.menus.filter(m => m.parentId === pid).sort((a,b) => a.order - b.order).forEach(m => {
+    const kids = DB.menus.filter(c => c.parentId === m.id);
+    out.push(Object.assign({}, m, {level:level, hasChild:kids.length > 0}));
+    if(kids.length && !collapsedMenu.has(m.id)) walk(m.id, level + 1);
+  });
+  walk(0, 0);
+  return out;
+}
+function renderMenus(){
+  const kw = ($('#mKw') ? $('#mKw').value : '').trim().toLowerCase();
+  const type = $('#mType') ? $('#mType').value : '';
+  let list = flatMenus();
+  if(kw || type){
+    list = list.filter(m => (!kw || m.name.includes(kw) || (m.perms || '').toLowerCase().includes(kw)) && (!type || m.type === type))
+               .map(m => Object.assign({}, m, {level:0}));
+  }
+  const typeTag = t => t === 'M' ? '<span class="tag tag-warn">目录</span>' : t === 'C' ? '<span class="tag tag-blue">菜单</span>' : '<span class="tag tag-off">动作</span>';
+  $('#menuTbl').innerHTML = table(['菜单名称','类型','排序','路由地址','组件路径','权限标识','状态','操作'], list.map(m => [
+    '<div class="tree-name" style="padding-left:' + (m.level * 18) + 'px">' +
+      (m.hasChild ? '<span class="tree-toggle" onclick="toggleMenuNode(' + m.id + ')">' + (collapsedMenu.has(m.id) ? '▸' : '▾') + '</span>' : '<span class="tree-toggle ph"></span>') +
+      (m.icon ? '<span class="mt-ico" title="' + m.icon + '">' + iconSvg(m.icon, 13) + '</span>' : '') +
+      '<b>' + m.name + '</b></div>',
+    typeTag(m.type), m.order,
+    m.path ? '<span class="mono">' + m.path + '</span>' : '<span class="muted">-</span>',
+    m.component ? '<span class="mono">' + m.component + '</span>' : '<span class="muted">-</span>',
+    m.perms ? '<span class="mono" style="color:#2563eb">' + m.perms + '</span>' : '<span class="muted">-</span>',
+    m.status === '0' ? '<span class="tag tag-ok">正常</span>' : '<span class="tag tag-off">停用</span>',
+    '<span class="op"><button class="btn-text" onclick="openMenuForm(' + m.id + ')">修改</button><span class="sep">|</span>' +
+    (m.type === 'F' ? '' : '<button class="btn-text" onclick="openMenuForm(0,' + m.id + ')">新增下级</button><span class="sep">|</span>') +
+    '<button class="btn-text danger" onclick="toast(\'删除菜单会同步清理 sys_role_menu 授权\')">删除</button></span>'
+  ]));
+  $('#menuCount').textContent = '共 ' + DB.menus.length + ' 条（目录 ' + DB.menus.filter(m => m.type === 'M').length +
+    ' · 菜单 ' + DB.menus.filter(m => m.type === 'C').length + ' · 动作 ' + DB.menus.filter(m => m.type === 'F').length + '）';
+}
+function toggleMenuNode(id){
+  if(collapsedMenu.has(id)) collapsedMenu.delete(id); else collapsedMenu.add(id);
+  renderMenus();
+}
+function openMenuForm(id, parentId){
+  const m = id ? DB.menus.find(x => x.id === id) : {id:0, name:'', parentId:parentId || 1000, order:1, type:'C', path:'', component:'', perms:'', icon:'', status:'0'};
+  const parents = [{id:0, name:'主目录'}].concat(DB.menus.filter(x => x.type !== 'F'));
+  openModal({
+    title: id ? '修改菜单' : '新增菜单',
+    width: 700,
+    body:'<div class="form-grid">' +
+      '<div class="fi"><label>上级菜单</label><select class="ipt" id="mfParent">' +
+        parents.map(p => '<option value="' + p.id + '"' + (p.id === m.parentId ? ' selected' : '') + '>' + p.name + '</option>').join('') + '</select></div>' +
+      '<div class="fi"><label>菜单类型</label><select class="ipt" id="mfType">' +
+        '<option value="M"' + (m.type === 'M' ? ' selected' : '') + '>目录</option>' +
+        '<option value="C"' + (m.type === 'C' ? ' selected' : '') + '>菜单</option>' +
+        '<option value="F"' + (m.type === 'F' ? ' selected' : '') + '>动作</option></select></div>' +
+      '<div class="fi"><label>菜单名称<i>*</i></label><input class="ipt" id="mfName" value="' + m.name + '"></div>' +
+      '<div class="fi"><label>菜单图标 <span class="muted">目录 / 菜单可配</span></label><div class="ipick" id="mfIconPick"></div></div>' +
+      '<div class="fi"><label>显示排序</label><input class="ipt" id="mfOrder" value="' + m.order + '"></div>' +
+      '<div class="fi"><label>路由地址</label><input class="ipt" id="mfPath" value="' + m.path + '"></div>' +
+      '<div class="fi"><label>组件路径</label><input class="ipt" id="mfComp" value="' + (m.component || '') + '"></div>' +
+      '<div class="fi"><label>权限标识</label><input class="ipt" id="mfPerms" value="' + (m.perms || '') + '" placeholder="system:post:list"></div>' +
+      '<div class="fi"><label>菜单状态</label><select class="ipt" id="mfSt"><option value="0"' + (m.status === '0' ? ' selected' : '') + '>正常</option><option value="1"' + (m.status === '1' ? ' selected' : '') + '>停用</option></select></div>' +
+      '<div class="fi full"><div class="form-tip">动作类型无需路由与组件；后端以 @PreAuthorize("@ss.hasPermi(\'system:post:list\')") 校验。</div></div>' +
+    '</div>',
+    footer:'<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" onclick="saveMenu(' + (id || 0) + ')">确定</button>'
+  });
+  iconPickerSetup('#mfIconPick', m.icon || '');
+}
+/* 图标选择器：触发区回显当前图标，点击弹出图标网格 */
+function iconPickerSetup(sel, cur){
+  const host = $(sel);
+  let val = cur || '';
+  host.innerHTML = '<div class="ipick-btn"><span class="ipick-ico"></span><span class="ipick-name"></span><span class="ipick-caret">▾</span></div>' +
+    '<div class="ipick-pop">' + ICON_LIB.map(it => '<div class="ipick-cell" data-k="' + it.key + '" title="' + it.name + '">' + iconSvg(it.key, 17) + '</div>').join('') +
+    '<div class="ipick-clear">清除图标</div></div>';
+  const btn = host.querySelector('.ipick-btn'), pop = host.querySelector('.ipick-pop');
+  const paint = () => {
+    host.dataset.icon = val;
+    const it = ICON_LIB.find(x => x.key === val);
+    btn.classList.toggle('empty', !it);
+    host.querySelector('.ipick-ico').innerHTML = it ? iconSvg(val, 17) : '';
+    host.querySelector('.ipick-name').textContent = it ? it.name + '（' + it.key + '）' : '未选择图标';
+    host.querySelectorAll('.ipick-cell').forEach(c => c.classList.toggle('on', c.dataset.k === val));
+  };
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = pop.classList.contains('open');
+    $$('.ipick-pop.open').forEach(p => p.classList.remove('open'));
+    if(!open) pop.classList.add('open');
+  });
+  pop.addEventListener('click', e => {
+    e.stopPropagation();
+    const cell = e.target.closest('.ipick-cell');
+    if(cell){ val = cell.dataset.k; paint(); pop.classList.remove('open'); }
+  });
+  host.querySelector('.ipick-clear').addEventListener('click', () => { val = ''; paint(); pop.classList.remove('open'); });
+  paint();
+}
+document.addEventListener('click', () => $$('.ipick-pop.open').forEach(p => p.classList.remove('open')));
+function saveMenu(id){
+  const name = $('#mfName').value.trim();
+  if(!name){ toast('菜单名称不能为空'); return; }
+  const data = {name:name, parentId:Number($('#mfParent').value), order:Number($('#mfOrder').value) || 0,
+    type:$('#mfType').value, path:$('#mfPath').value.trim(), component:$('#mfComp').value.trim(),
+    perms:$('#mfPerms').value.trim(), icon:$('#mfIconPick').dataset.icon || '', status:$('#mfSt').value};
+  if(id){ Object.assign(DB.menus.find(m => m.id === id), data); toast('菜单已更新', 'ok'); }
+  else {
+    const nid = Math.max.apply(null, DB.menus.map(m => m.id)) + 1;
+    DB.menus.push(Object.assign({id:nid, time:'2026-10-30 15:50'}, data));
+    DB.roles[0].menuIds.push(nid);
+    toast('菜单创建成功，已默认授权给超级管理员', 'ok');
+  }
+  closeModal(); renderMenus();
+}
+
+/* =========================================================
+   菜单工具（权限树、角色授权弹窗共用）
+   ========================================================= */
+function permMenus(parentId){
+  return DB.menus.filter(m => m.parentId === parentId).sort((a,b) => a.order - b.order);
+}
+function permDescendants(id){
+  const kids = permMenus(id);
+  let out = kids.map(k => k.id);
+  kids.forEach(k => { out = out.concat(permMenus(k.id).map(b => b.id)); });
+  return out;
+}
+
+/* =========================================================
+   通用穿梭框
+   ========================================================= */
+function openTransfer(cfg){
+  if(cfg.kind === 'roleMenu'){ openPermPicker({kind:'role', id:cfg.id}); return; }
+  let title, desc, items, selected, onConfirm;
+
+  if(cfg.kind === 'userRole'){
+    const u = DB.users.find(x => x.id === cfg.id);
+    title = '分配用户角色 · ' + u.nick;
+    desc = '直接授予该用户的角色；岗位权限与组织权限另行直接分配，不经角色。';
+    items = DB.roles.map(r => ({id:r.id, name:r.name, sub:r.key}));
+    selected = u.roleIds.slice();
+    onConfirm = ids => { u.roleIds = ids; renderUsers(); renderRoles(); toast('用户角色已更新', 'ok'); };
+  }
+  if(cfg.kind === 'roleUser'){
+    const r = roleById(cfg.id);
+    title = '分配用户 · ' + r.name;
+    desc = '将角色直接授予用户（与岗位权限、组织权限并行生效）。';
+    items = DB.users.map(u => ({id:u.id, name:u.nick, sub:u.username}));
+    selected = DB.users.filter(u => u.roleIds.indexOf(r.id) >= 0).map(u => u.id);
+    onConfirm = ids => {
+      DB.users.forEach(u => {
+        const has = u.roleIds.indexOf(r.id) >= 0, want = ids.indexOf(u.id) >= 0;
+        if(want && !has) u.roleIds.push(r.id);
+        if(!want && has) u.roleIds = u.roleIds.filter(x => x !== r.id);
+      });
+      renderRoles(); renderUsers(); toast('角色成员已更新', 'ok');
+    };
+  }
+
+  let sel = new Set(selected), kw = '';
+  const mask = openModal({
+    title:title, width:780,
+    body:'<div class="form-tip" style="margin:-4px 0 12px">' + desc + '</div><div class="tr-wrap" id="trWrap"></div>',
+    footer:'<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" id="trOk">确定</button>'
+  });
+  const wrap = mask.querySelector('#trWrap');
+  const paint = () => {
+    const left = items.filter(i => !sel.has(i.id) && (!kw || i.name.indexOf(kw) >= 0 || (i.sub || '').indexOf(kw) >= 0));
+    const right = items.filter(i => sel.has(i.id));
+    wrap.innerHTML =
+      '<div class="tr-col"><div class="tr-head"><span>待选（' + left.length + '）</span><input class="ipt" id="trKw" placeholder="搜索" value="' + kw + '"></div>' +
+        '<div class="tr-list">' + (left.map(i => '<div class="tr-item" data-add="' + i.id + '"><span>' + i.name + '</span><em>' + (i.sub || '') + '</em></div>').join('') || '<div class="tr-empty">无匹配项</div>') + '</div></div>' +
+      '<div class="tr-mid">⇄</div>' +
+      '<div class="tr-col"><div class="tr-head"><span>已选（' + right.length + '）</span><a href="javascript:;" data-clear="1">清空</a></div>' +
+        '<div class="tr-list">' + (right.map(i => '<div class="tr-item" data-del="' + i.id + '"><span>' + i.name + '</span><em>' + (i.sub || '') + '</em></div>').join('') || '<div class="tr-empty">暂无选择</div>') + '</div></div>';
+    const k = wrap.querySelector('#trKw');
+    k.addEventListener('input', e => {
+      kw = e.target.value; paint();
+      const k2 = wrap.querySelector('#trKw');
+      k2.focus(); k2.setSelectionRange(kw.length, kw.length);
+    });
+  };
+  paint();
+  wrap.addEventListener('click', e => {
+    const a = e.target.closest('[data-add]'), d = e.target.closest('[data-del]'), c = e.target.closest('[data-clear]');
+    if(a){ sel.add(Number(a.dataset.add)); paint(); }
+    if(d){ sel.delete(Number(d.dataset.del)); paint(); }
+    if(c){ sel.clear(); paint(); }
+  });
+  mask.querySelector('#trOk').onclick = () => { onConfirm(Array.from(sel)); closeModal(); };
+}
+
+/* =========================================================
+   权限树弹窗：岗位 / 组织直接授权（不经角色）
+   ========================================================= */
+function openPermPicker(cfg){
+  const isRole = cfg.kind === 'role';
+  const t = isRole ? roleById(cfg.id) : postById(cfg.id);
+  if(!t) return;
+  if(isRole && t.id === 1){ toast('超级管理员默认拥有全部权限，不可修改'); return; }
+  const saved = t.menuIds || [];
+  const draft = new Set(saved);
+  const closed = new Set();
+  const ensureParents = id => {
+    let node = menuById(id);
+    while(node && node.parentId){
+      const p = menuById(node.parentId); if(!p) break;
+      draft.add(p.id); node = p;
+    }
+  };
+  const trimParents = id => {
+    let node = menuById(id);
+    while(node && node.parentId){
+      const p = menuById(node.parentId); if(!p) break;
+      const sibs = permMenus(p.id);
+      if(sibs.some(s => draft.has(s.id) || permMenus(s.id).some(b => draft.has(b.id)))) break;
+      draft.delete(p.id); node = p;
+    }
+  };
+  const toggle = (id, on) => {
+    const desc = permDescendants(id);
+    if(on){ draft.add(id); desc.forEach(d => draft.add(d)); ensureParents(id); }
+    else { draft.delete(id); desc.forEach(d => draft.delete(d)); trimParents(id); }
+  };
+  const mask = openModal({
+    title: '分配' + (isRole ? '角色' : '岗位') + '权限 · ' + t.name,
+    width: 760,
+    body:'<div class="form-tip" style="margin:-4px 0 12px">' + (isRole
+      ? '角色权限只授予直接拥有该角色的用户，写入 sys_role_menu；数据范围在角色列表单独维护。'
+      : '把菜单/动作权限直接授给岗位，全部在岗人自动获得，不经角色。') + '</div>' +
+      '<div class="ptools"><span class="muted" id="ppCount"></span><span class="sp"></span>' +
+      '<button class="btn-text" data-cmd="expand">全部展开</button>' +
+      '<button class="btn-text" data-cmd="collapse">全部折叠</button>' +
+      '<button class="btn-text" data-cmd="all">全选</button>' +
+      '<button class="btn-text" data-cmd="none">清空</button></div>' +
+      '<div class="ptree" id="ppTree" style="max-height:420px"></div>',
+    footer:'<button class="btn" onclick="closeModal()">取消</button><button class="btn btn-primary" id="ppOk">保存授权</button>'
+  });
+  const box = mask.querySelector('#ppTree');
+  const paint = () => {
+    let html = '';
+    permMenus(0).forEach(top => {
+      const rows = permMenus(top.id).map(m => ({m:m, btns:permMenus(m.id)}));
+      const ids = [top.id].concat.apply([top.id], rows.map(x => [x.m.id].concat(x.btns.map(b => b.id))));
+      const selN = ids.filter(i => draft.has(i)).length;
+      const shut = closed.has(top.id);
+      html += '<div class="pgroup"><div class="prow">' +
+        '<span class="ptri" data-fold="' + top.id + '">' + (shut ? '▸' : '▾') + '</span>' +
+        '<input class="cb" type="checkbox" data-nid="' + top.id + '"><span class="pi-name">' + top.name + '</span>' +
+        '<span class="tag tag-off">目录</span><span class="pc">' + selN + '/' + ids.length + '</span></div>';
+      if(!shut) rows.forEach(x => {
+        html += '<div class="prow" style="padding-left:24px">' +
+          '<input class="cb" type="checkbox" data-nid="' + x.m.id + '"><span>' + x.m.name + '</span>' +
+          '<span class="pc">' + (x.m.perms || '') + '</span></div>';
+        if(x.btns.length){
+          html += '<div class="pchips">' + x.btns.map(b =>
+            '<span class="pchip' + (draft.has(b.id) ? ' on' : '') + '" data-chip="' + b.id + '"><i></i>' + b.name + '</span>').join('') + '</div>';
+        }
+      });
+      html += '</div>';
+    });
+    box.innerHTML = html || '<div class="empty">暂无菜单</div>';
+    box.querySelectorAll('input[data-nid]').forEach(cb => {
+      const id = Number(cb.dataset.nid);
+      const kids = permDescendants(id);
+      const sel = kids.filter(k => draft.has(k)).length;
+      const self = draft.has(id);
+      cb.checked = self && (kids.length === 0 || sel === kids.length);
+      cb.indeterminate = !cb.checked && (self || sel > 0);
+    });
+    const c = mask.querySelector('#ppCount');
+    if(c) c.textContent = '已选 ' + draft.size + ' / ' + DB.menus.length + ' 项';
+  };
+  box.addEventListener('click', e => {
+    const fold = e.target.closest('[data-fold]');
+    if(fold){
+      const id = Number(fold.dataset.fold);
+      if(closed.has(id)) closed.delete(id); else closed.add(id);
+      paint(); return;
+    }
+    const chip = e.target.closest('[data-chip]');
+    if(chip){
+      const id = Number(chip.dataset.chip);
+      if(draft.has(id)){ draft.delete(id); trimParents(id); }
+      else { draft.add(id); ensureParents(id); }
+      paint();
+    }
+  });
+  box.addEventListener('change', e => {
+    const cb = e.target.closest('input[data-nid]');
+    if(cb){ toggle(Number(cb.dataset.nid), cb.checked); paint(); }
+  });
+  mask.querySelectorAll('[data-cmd]').forEach(b => b.addEventListener('click', () => {
+    const c = b.dataset.cmd;
+    if(c === 'expand') closed.clear();
+    if(c === 'collapse') permMenus(0).forEach(x => closed.add(x.id));
+    if(c === 'all') DB.menus.forEach(m => draft.add(m.id));
+    if(c === 'none') draft.clear();
+    paint();
+  }));
+  mask.querySelector('#ppOk').onclick = () => {
+    const ids = Array.from(draft).sort((a,b) => a - b);
+    t.menuIds = ids;
+    if(isRole) renderRoles(); else renderPosts();
+    closeModal();
+    toast((isRole ? '角色' : '岗位') + '权限已保存：' + ids.length + ' 项', 'ok');
+  };
+  paint();
+}
+
+/* =========================================================
+   权限管理（左侧授权对象 / 右侧权限树 · 数据权限）
+   ========================================================= */
+const permState = {
+  tab:'postorg', subType:'org', postId:1, orgId:103, roleId:3, rtab:'menu',
+  kw:'', onlySel:false, cascade:true, inited:false,
+  closed:new Set(), leftClosed:new Set(), draft:new Set(), scopeOrgs:new Set([101,102])
+};
+const SCOPE_NOTE = {
+  '1':'不受组织限制，可查看全部数据',
+  '2':'仅可查看下面勾选的组织（sys_role_scope_org）',
+  '3':'仅可查看其任职岗位所属组织的数据',
+  '4':'本组织 + 所有下级组织，沿 ancestors 计算',
+  '5':'仅可查看本人创建或负责的数据'
+};
+const ICON_ORG = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="#2563eb" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M2.6 13.4V3.6c0-.4.3-.7.7-.7h4.6c.4 0 .7.3.7.7v9.8"/>' +
+  '<path d="M8.6 13.4V7.4c0-.4.3-.7.7-.7h3.4c.4 0 .7.3.7.7v6"/>' +
+  '<path d="M1.6 13.4h12.8"/>' +
+  '<path d="M4.3 5.5h1.2M4.3 7.8h1.2M4.3 10.1h1.2M10.4 9.2h1.2M10.4 11.2h1.2"/></svg>';
+const ICON_POST = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="#d97a09" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">' +
+  '<circle cx="8" cy="5.2" r="2.5"/><path d="M3 13.6c.7-2.8 2.7-4.3 5-4.3s4.3 1.5 5 4.3"/></svg>';
+const ICON_ROLE = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="#7c5cd6" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M8 1.9l4.5 1.6v4c0 2.8-1.8 4.9-4.5 5.9-2.7-1-4.5-3.1-4.5-5.9v-4L8 1.9z"/>' +
+  '<path d="M6 7.9l1.4 1.4 2.7-2.8"/></svg>';
+
+/* 授权对象抽象：role / post / org 统一读写 */
+function permSubject(){
+  if(permState.tab === 'role'){
+    const r = roleById(permState.roleId) || DB.roles[0];
+    return {type:'role', id:r.id, name:r.name, sub:r.key, locked:r.id === 1,
+      menus:r.id === 1 ? DB.menus.map(m => m.id) : r.menuIds, tag:'角色'};
+  }
+  if(permState.subType === 'post'){
+    const p = postById(permState.postId) || DB.posts[0];
+    return {type:'post', id:p.id, name:p.name, sub:orgName(p.orgId), locked:false,
+      menus:p.menuIds || [], tag:'岗位'};
+  }
+  const o = orgById(permState.orgId) || DB.orgs[0];
+  const om = DB.orgMenus.find(x => x.orgId === o.id);
+  return {type:'org', id:o.id, name:o.name, sub:'组织节点', locked:false,
+    menus:om ? om.menuIds : [], tag:'组织'};
+}
+function permLoadDraft(){
+  const s = permSubject();
+  permState.draft = new Set(s.menus);
+  permState.kw = ''; permState.onlySel = false; permState.closed = new Set();
+}
+function permSwitchTab(tab){
+  permState.tab = tab;
+  permState.rtab = 'menu';
+  permLoadDraft();
+  renderPerm();
+}
+function permSetRtab(t){
+  permState.rtab = t;
+  renderPerm();
+}
+function permSelect(type, id){
+  if(type === 'role'){
+    if(!roleById(id)) return;
+    permState.roleId = id; permState.tab = 'role';
+  } else {
+    if(type === 'post'){ if(!postById(id)) return; permState.postId = id; }
+    else { if(!orgById(id)) return; permState.orgId = id; }
+    permState.tab = 'postorg'; permState.subType = type;
+    permUnfoldAncestors(type, id);
+  }
+  permState.rtab = 'menu';
+  permLoadDraft();
+  renderPerm();
+}
+function permUnfoldAncestors(type, id){
+  const node = type === 'post' ? postById(id) : orgById(id);
+  if(!node) return;
+  let o = orgById(type === 'post' ? node.orgId : node.parentId);
+  while(o){ permState.leftClosed.delete('o' + o.id); o = orgById(o.parentId); }
+}
+function permLeftFold(key){
+  if(permState.leftClosed.has(key)) permState.leftClosed.delete(key); else permState.leftClosed.add(key);
+  renderPermLeft();
+}
+function permIsSel(type, id){
+  if(permState.tab !== 'postorg' || permState.subType !== type) return false;
+  return type === 'post' ? permState.postId === id : permState.orgId === id;
+}
+
+function renderPerm(){
+  if(!permState.inited){ permLoadDraft(); permState.inited = true; }
+  const a = $('#ptPostOrg'), b = $('#ptRole');
+  if(a) a.classList.toggle('on', permState.tab === 'postorg');
+  if(b) b.classList.toggle('on', permState.tab === 'role');
+  renderPermLeft();
+  renderPermPanel();
+}
+
+/* 左栏：岗位/组织混排树 / 角色列表 */
+function renderPermLeft(){
+  const search = $('#permLeftSearch'), box = $('#permLeft');
+  if(!box) return;
+  if(permState.tab === 'role'){
+    if(!$('#pRoleKw')) search.innerHTML = '<input class="ipt" id="pRoleKw" placeholder="搜索角色名称 / 权限字符" oninput="renderPermLeft()" style="width:100%;margin-bottom:8px">';
+    const kwEl = $('#pRoleKw');
+    const kw = (kwEl ? kwEl.value : '').trim().toLowerCase();
+    const list = DB.roles.filter(r => !kw || r.name.toLowerCase().indexOf(kw) >= 0 || r.key.toLowerCase().indexOf(kw) >= 0);
+    box.innerHTML = list.length ? list.map(r =>
+      '<div class="pitem' + (permState.roleId === r.id ? ' on' : '') + '" onclick="permSelect(\'role\',' + r.id + ')">' +
+        '<div class="pi-top"><span class="tico">' + ICON_ROLE + '</span>' +
+          '<span class="pi-name">' + r.name + '</span>' +
+          (r.id === 1 ? '<span class="tag tag-warn">锁定</span>' : '') + '</div></div>'
+    ).join('') : '<div class="empty">无匹配角色</div>';
+    return;
+  }
+  search.innerHTML = '';
+  box.innerHTML = permOrgTreeHtml();
+}
+function permOrgTreeHtml(){
+  const walk = (pid, depth) => {
+    const kids = DB.orgs.filter(o => o.parentId === pid).sort((a,b) => a.order - b.order);
+    if(!kids.length) return '';
+    return kids.map(o => {
+      const folded = permState.leftClosed.has('o' + o.id);
+      const posts = DB.posts.filter(p => p.orgId === o.id).sort((a,b) => a.sort - b.sort);
+      const subN = DB.orgs.filter(c => c.parentId === o.id).length + posts.length;
+      let html = '<div class="pitem' + (permIsSel('org', o.id) ? ' on' : '') + '" style="padding-left:' + (8 + depth*14) + 'px" onclick="permSelect(\'org\',' + o.id + ')">' +
+        '<div class="pi-top">' +
+          '<span class="ptri"' + (subN ? ' onclick="event.stopPropagation();permLeftFold(\'o' + o.id + '\')"' : ' style="visibility:hidden"') + '>' + (folded ? '▸' : '▾') + '</span>' +
+          '<span class="tico">' + ICON_ORG + '</span>' +
+          '<span class="pi-name">' + o.name + '</span>' +
+          (o.status === '1' ? '<span class="tag tag-off">停用</span>' : '') +
+        '</div></div>';
+      if(!folded){
+        posts.forEach(p => {
+          html += '<div class="pitem post' + (permIsSel('post', p.id) ? ' on' : '') + '" style="padding-left:' + (26 + depth*14) + 'px" onclick="permSelect(\'post\',' + p.id + ')">' +
+            '<div class="pi-top"><span class="ptri" style="visibility:hidden">▾</span>' +
+              '<span class="tico">' + ICON_POST + '</span>' +
+              '<span class="pi-name">' + p.name + '</span></div></div>';
+        });
+        html += walk(o.id, depth + 1);
+      }
+      return html;
+    }).join('');
+  };
+  return walk(0, 0) || '<div class="empty">无组织</div>';
+}
+
+/* 右侧：权限面板 */
+function renderPermPanel(){
+  const box = $('#permPanel');
+  if(!box) return;
+  const s = permSubject();
+  const isRole = s.type === 'role';
+  const locked = s.locked;
+  const tagCls = isRole ? 'tag-violet' : s.type === 'post' ? 'tag-blue' : 'tag-ok';
+  const head = locked ? '系统内置角色，拥有全部权限且不可取消'
+    : isRole ? '角色仅授予用户，授权写入 sys_role_menu；数据范围在「数据权限」页签单独维护'
+    : s.type === 'post' ? '岗位权限对该岗位全部在岗人生效（sys_post_menu），与岗位上下级无关'
+    : '组织权限沿组织树向下继承，覆盖所有下级组织的任职用户（sys_org_menu）';
+  const rtab = isRole ?
+    '<div class="tabs-line" style="flex:0 0 auto">' +
+      '<span class="tl' + (permState.rtab === 'menu' ? ' on' : '') + '" id="prMenu" onclick="permSetRtab(\'menu\')">菜单权限</span>' +
+      '<span class="tl' + (permState.rtab === 'data' ? ' on' : '') + '" id="prData" onclick="permSetRtab(\'data\')">数据权限</span>' +
+    '</div>' : '';
+  const headHtml =
+    '<div class="card-head" style="align-items:flex-start;gap:12px">' +
+      '<div style="min-width:0;flex:1">' +
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+          '<b style="font-size:14px">' + s.name + '</b>' +
+          '<span class="tag ' + tagCls + '">' + s.tag + '</span>' +
+          (locked ? '<span class="tag tag-warn">锁定</span>' : '<span class="tag tag-off">可编辑</span>') +
+          '<span class="cell-sub mono" style="margin:0">' + s.sub + '</span>' +
+        '</div>' +
+        '<div class="cell-sub">' + head + '</div>' +
+      '</div>' + rtab +
+    '</div>';
+  if(isRole && permState.rtab === 'data'){
+    box.innerHTML = headHtml + '<div style="padding:16px">' + permScopeHtml() + '</div>';
+    return;
+  }
+  box.innerHTML = headHtml +
+    '<div class="ptools">' +
+      '<input class="ipt" id="pKw" placeholder="搜索菜单或权限标识" value="' + permState.kw.replace(/"/g,'') + '" oninput="permSetKw(this.value)">' +
+      '<label class="ck"><input type="checkbox" id="pCascade"' + (permState.cascade ? ' checked' : '') + ' onchange="permSetCascade(this.checked)">父子联动</label>' +
+      '<label class="ck"><input type="checkbox" id="pOnly"' + (permState.onlySel ? ' checked' : '') + ' onchange="permSetOnly(this.checked)">仅看已选</label>' +
+      '<span class="sp"></span>' +
+      (locked ? '' :
+        '<button class="btn-text" onclick="permExpand(true)">展开全部</button>' +
+        '<button class="btn-text" onclick="permExpand(false)">折叠全部</button>' +
+        '<button class="btn-text" onclick="permSelectAll(true)">全选</button>' +
+        '<button class="btn-text" onclick="permSelectAll(false)">取消全选</button>') +
+    '</div>' +
+    '<div class="ptree" id="permTree"></div>' +
+    '<div class="pbar"><span class="muted" id="permBar"></span><span class="sp"></span>' +
+      (locked ? '<span class="muted" style="padding-right:14px">无需配置</span>' :
+        '<button class="btn" onclick="permReset()">还原</button>' +
+        '<button class="btn btn-primary" onclick="permSave()">保存</button>') +
+    '</div>';
+  renderPermTree();
+}
+function permScopeHtml(){
+  const r = roleById(permState.roleId) || DB.roles[0];
+  const isSuper = r.id === 1;
+  const segs = Object.keys(SCOPE_NAME).map(k =>
+    '<button class="' + (r.scope === k ? 'on' : '') + '"' + (isSuper ? ' disabled' : ' onclick="setScope(' + r.id + ',\'' + k + '\')"') + '>' +
+      SCOPE_NAME[k].replace('数据','') + '</button>').join('');
+  const orgPick = (r.scope === '2' && !isSuper)
+    ? '<div style="margin-top:14px"><div class="muted" style="margin-bottom:7px">授权组织（sys_role_scope_org）</div>' +
+      '<div class="pick">' + DB.orgs.map(o =>
+        '<label class="' + (permState.scopeOrgs.has(o.id) ? 'on' : '') + '" onclick="permToggleScopeOrg(' + o.id + ')">' + o.name + '</label>').join('') + '</div></div>'
+    : '';
+  return '<span class="seg">' + segs + '</span>' +
+    '<p class="muted" style="margin:10px 0 0">' + SCOPE_NOTE[r.scope] + (isSuper ? '（超级管理员锁定全部数据）' : '') + '</p>' +
+    orgPick +
+    '<div class="form-tip" style="margin-top:16px">数据范围只随用户角色生效，多角色取最宽的一档；岗位、组织直授只授予功能权限，不携带数据范围。无角色用户按「仅本人」兜底。</div>';
+}
+function permToggleScopeOrg(id){
+  if(permState.scopeOrgs.has(id)) permState.scopeOrgs.delete(id); else permState.scopeOrgs.add(id);
+  renderPermPanel();
+}
+function setScope(roleId, scope){
+  const r = roleById(roleId);
+  r.scope = scope;
+  renderPermPanel();
+  renderRoles();
+  toast(r.name + ' 数据范围调整为「' + SCOPE_NAME[scope] + '」', 'ok');
+}
+function renderPermTree(){
+  const box = $('#permTree');
+  if(!box) return;
+  const kw = permState.kw.trim().toLowerCase();
+  const hitKw = (name, perms) => !kw || (name || '').toLowerCase().indexOf(kw) >= 0 || (perms || '').toLowerCase().indexOf(kw) >= 0;
+  let html = '';
+  permMenus(0).forEach(top => {
+    const rows = permMenus(top.id).map(m => ({m:m, btns:permMenus(m.id)}));
+    const anyChildHit = rows.some(x => hitKw(x.m.name, x.m.perms) || x.btns.some(b => hitKw(b.name, b.perms)));
+    if(!hitKw(top.name, top.perms) && !anyChildHit) return;
+    const ids = [top.id].concat.apply([top.id], rows.map(x => [x.m.id].concat(x.btns.map(b => b.id))));
+    const selN = ids.filter(i => permState.draft.has(i)).length;
+    if(permState.onlySel && !selN) return;
+    const shut = permState.closed.has(top.id);
+    html += '<div class="pgroup"><div class="prow">' +
+      '<span class="ptri" onclick="permFold(' + top.id + ')">' + (shut ? '▸' : '▾') + '</span>' +
+      '<input class="cb" type="checkbox" data-nid="' + top.id + '">' +
+      '<span class="pi-name">' + top.name + '</span>' +
+      '<span class="tty tty-dir">目录</span>' +
+      '<span class="pc">' + selN + '/' + ids.length + '</span></div>';
+    if(!shut) rows.forEach(x => {
+      if(kw && !hitKw(x.m.name, x.m.perms) && !x.btns.some(b => hitKw(b.name, b.perms)) && !hitKw(top.name, top.perms)) return;
+      const shutM = x.btns.length && permState.closed.has(x.m.id);
+      html += '<div class="prow" style="padding-left:24px">' +
+        (x.btns.length ? '<span class="ptri" onclick="permFold(' + x.m.id + ')">' + (shutM ? '▸' : '▾') + '</span>'
+                       : '<span class="ptri" style="visibility:hidden">▾</span>') +
+        '<input class="cb" type="checkbox" data-nid="' + x.m.id + '">' +
+        '<span class="prow-name">' + x.m.name + '</span>' +
+        '<span class="tty tty-menu">菜单</span>' +
+        '<span class="pc">' + (x.m.perms || '') + '</span></div>';
+      if(x.btns.length && !shutM) x.btns.forEach(b => {
+        html += '<div class="prow prow-act" style="padding-left:46px">' +
+          '<span class="ptri" style="visibility:hidden">▾</span>' +
+          '<input class="cb" type="checkbox" data-nid="' + b.id + '">' +
+          '<span class="prow-name">' + b.name + '</span>' +
+          '<span class="tty tty-act">动作</span>' +
+          '<span class="pc">' + (b.perms || '') + '</span></div>';
+      });
+    });
+    html += '</div>';
+  });
+  box.innerHTML = html || '<div class="empty">' + (permState.onlySel ? '当前对象还没有已选权限' : '无匹配菜单') + '</div>';
+  box.querySelectorAll('input[data-nid]').forEach(cb => {
+    const id = Number(cb.dataset.nid);
+    const kids = permDescendants(id);
+    const sel = kids.filter(k => permState.draft.has(k)).length;
+    const self = permState.draft.has(id);
+    cb.checked = self && (kids.length === 0 || sel === kids.length);
+    cb.indeterminate = !cb.checked && (self || sel > 0);
+    cb.disabled = permSubject().locked;
+  });
+  box.onchange = e => {
+    const cb = e.target.closest('input[data-nid]');
+    if(!cb || permSubject().locked) return;
+    permToggleNode(Number(cb.dataset.nid), cb.checked);
+  };
+  updatePermCount();
+}
+function updatePermCount(){
+  const bar = $('#permBar');
+  if(bar) bar.textContent = '已选 ' + permState.draft.size + ' / ' + DB.menus.length + ' 项';
+}
+function permToggleNode(id, on){
+  const desc = permDescendants(id);
+  if(on){
+    permState.draft.add(id); desc.forEach(d => permState.draft.add(d));
+    if(permState.cascade) permEnsureParents(id);
+  } else {
+    permState.draft.delete(id); desc.forEach(d => permState.draft.delete(d));
+    if(permState.cascade) permTrimParents(id);
+  }
+  renderPermTree();
+  updatePermCount();
+}
+function permEnsureParents(id){
+  let node = DB.menus.find(m => m.id === id);
+  while(node && node.parentId){
+    const p = DB.menus.find(m => m.id === node.parentId);
+    if(!p) break;
+    permState.draft.add(p.id); node = p;
+  }
+}
+function permTrimParents(id){
+  let node = DB.menus.find(m => m.id === id);
+  while(node && node.parentId){
+    const p = DB.menus.find(m => m.id === node.parentId);
+    if(!p) break;
+    const sibs = permMenus(p.id);
+    if(sibs.some(x => permState.draft.has(x.id) || permMenus(x.id).some(b => permState.draft.has(b.id)))) break;
+    permState.draft.delete(p.id); node = p;
+  }
+}
+function permFold(id){
+  if(permState.closed.has(id)) permState.closed.delete(id); else permState.closed.add(id);
+  renderPermTree();
+}
+function permSetKw(v){ permState.kw = v; renderPermTree(); }
+function permSetOnly(v){ permState.onlySel = v; renderPermTree(); }
+function permSetCascade(v){ permState.cascade = v; }
+function permExpand(all){
+  permState.closed = new Set();
+  if(!all) permMenus(0).forEach(t => permState.closed.add(t.id));
+  renderPermTree();
+}
+function permSelectAll(on){
+  if(permSubject().locked) return;
+  permState.draft = on ? new Set(DB.menus.map(m => m.id)) : new Set();
+  renderPermTree();
+}
+function permReset(){
+  permLoadDraft();
+  renderPermPanel();
+  toast('已还原为保存前的授权', 'ok');
+}
+function permSave(){
+  const s = permSubject();
+  if(s.locked){ toast('超级管理员默认拥有全部权限，不可修改'); return; }
+  const ids = Array.from(permState.draft).sort((a,b) => a - b);
+  if(s.type === 'role'){
+    roleById(s.id).menuIds = ids;
+    renderRoles();
+  } else if(s.type === 'post'){
+    postById(s.id).menuIds = ids;
+    renderPosts();
+  } else {
+    const i = DB.orgMenus.findIndex(x => x.orgId === s.id);
+    if(ids.length){ if(i >= 0) DB.orgMenus[i].menuIds = ids; else DB.orgMenus.push({orgId:s.id, menuIds:ids}); }
+    else if(i >= 0) DB.orgMenus.splice(i, 1);
+    renderOrgRight();
+  }
+  permState.draft = new Set(ids);
+  renderPermLeft();
+  renderPermTree();
+  renderDashboard();
+  toast(s.tag + '「' + s.name + '」权限已保存：' + ids.length + ' 项', 'ok');
+}
+
+/* =========================================================
+   初始化
+   ========================================================= */
+function renderAll(){
+  renderDashboard();
+  $('#uOrg').innerHTML = orgOptions();
+  renderOrgs();
+  renderOrgTree();
+  renderPosts();
+  renderUsers();
+  renderRoles();
+  renderMenus();
+  renderLogs();
+}
+$('#lgPwd').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
+$('#lgUser').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
+</script>
+</body>
+</html>

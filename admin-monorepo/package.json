@@ -1,0 +1,26 @@
+{
+  "name": "admin-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "云枢 Admin · 组织-岗位-角色权限体系",
+  "license": "MIT",
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "clean": "turbo run clean",
+    "format": "prettier --write \"**/*.{js,mjs,cjs,ts,tsx,vue,json,md,yaml,yml,css,scss,html}\"",
+    "format:check": "prettier --check \"**/*.{js,mjs,cjs,ts,tsx,vue,json,md,yaml,yml,css,scss,html}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "turbo": "^2.5.0"
+  }
+}

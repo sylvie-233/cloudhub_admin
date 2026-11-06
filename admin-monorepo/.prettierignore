@@ -1,0 +1,12 @@
+# 依赖与锁文件
+node_modules/
+pnpm-lock.yaml
+
+# 构建产物
+dist/
+.turbo/
+.vite/
+coverage/
+
+# 日志
+*.log

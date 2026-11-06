@@ -1,0 +1,38 @@
+{
+  "name": "@cloudhub/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsup src/main.ts --format esm --dts --clean --target node20",
+    "start": "node dist/main.js",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist .turbo"
+  },
+  "dependencies": {
+    "@cloudhub/db": "workspace:*",
+    "@cloudhub/types": "workspace:*",
+    "@cloudhub/utils": "workspace:*",
+    "@hono/node-server": "^1.13.7",
+    "@hono/zod-openapi": "^1.6.3",
+    "@scalar/hono-api-reference": "^0.12.18",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^18.0.9",
+    "hono": "^4.6.16",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudhub/eslint-config": "workspace:*",
+    "@cloudhub/tsconfig": "workspace:*",
+    "@types/node": "^22.10.5",
+    "eslint": "^9.18.0",
+    "rimraf": "^6.0.1",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
