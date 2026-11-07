@@ -3,15 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc --build && vite build",
-    "preview": "vite preview",
-    "lint": "eslint . --max-warnings 0",
-    "typecheck": "vue-tsc --build --force",
-    "test": "vitest run",
-    "clean": "rimraf dist .vite .turbo"
-  },
   "dependencies": {
     "@cloudhub/types": "workspace:*",
     "pinia": "^3.0.1",

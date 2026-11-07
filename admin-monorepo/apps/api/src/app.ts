@@ -47,6 +47,11 @@ app.get(
   Scalar({
     url: '/api/openapi.json',
     pageTitle: 'CloudHub Admin API 文档',
+    // 将文档中填写的 Bearer Token 持久化到 localStorage，刷新页面后无需重新填写
+    persistAuth: true,
+    authentication: {
+      preferredSecurityScheme: 'BearerAuth',
+    },
   }),
 );
 

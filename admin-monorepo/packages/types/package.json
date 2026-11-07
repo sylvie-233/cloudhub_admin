@@ -15,7 +15,6 @@
     "dist"
   ],
   "scripts": {
-    "dev": "tsup src/index.ts --format esm --dts --watch",
     "build": "tsup src/index.ts --format esm --dts --clean",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
