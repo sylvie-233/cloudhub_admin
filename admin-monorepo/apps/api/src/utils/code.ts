@@ -12,7 +12,8 @@ export type BizCodeKind = keyof typeof CODE_CONFIG;
 
 export async function generateBizCode(kind: BizCodeKind): Promise<string> {
   const config = CODE_CONFIG[kind];
-  const datePart = formatDate();
+  // 规则要求 yyyymmdd 紧凑格式，formatDate 返回的是 YYYY-MM-DD
+  const datePart = formatDate().replaceAll('-', '');
   const prefix = `${config.prefix}${datePart}`;
   const row = await dbClient.queryOne<{ maxCode: string | null }>(
     `SELECT MAX(${config.column}) AS maxCode FROM ${config.table} WHERE ${config.column} LIKE ?`,

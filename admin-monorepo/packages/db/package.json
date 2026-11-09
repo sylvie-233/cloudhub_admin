@@ -1,6 +1,6 @@
 {
   "name": "@cloudhub/db",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "云枢 Admin 共享数据库层（Drizzle schema + MySQL 连接）",

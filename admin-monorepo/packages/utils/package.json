@@ -1,6 +1,6 @@
 {
   "name": "@cloudhub/utils",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "云枢 Admin 共享纯函数工具",

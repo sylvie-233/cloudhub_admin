@@ -134,10 +134,13 @@ cp apps/api/.env.example apps/api/.env
 pnpm --filter @cloudhub/api dev        # tsx watch，默认 http://localhost:3000
 pnpm --filter @cloudhub/api typecheck
 pnpm --filter @cloudhub/api lint
-pnpm --filter @cloudhub/api test       # Vitest（当前无测试用例）
+pnpm --filter @cloudhub/api test       # Vitest 单次运行
+pnpm --filter @cloudhub/api test:watch # Vitest 监听模式
 pnpm --filter @cloudhub/api build && pnpm --filter @cloudhub/api start
 pnpm build                             # turbo 构建全部 workspace（含共享包）
 ```
+
+测试文件位于 [test/](admin-monorepo/apps/api/test/)，通过 mock [src/db/index.ts](admin-monorepo/apps/api/src/db/index.ts) 避免连接真实 MySQL，覆盖工具函数、入参校验、SQL 参数拼装、数据范围、中间件与接口错误契约；新增业务规则时应同步补充用例。
 
 首次启动前需初始化数据库：MySQL 容器首次创建数据卷时会自动执行 `doc/cloudhub_admin_v1.sql`；已有库用 `pwsh ./manage.ps1 init`（会 DROP 并重建，需确认）。
 
