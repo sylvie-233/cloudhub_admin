@@ -25,11 +25,14 @@ const props = withDefaults(
     locked?: boolean;
     /** 当前账号无保存数据范围权限；仅可查看。 */
     readonly?: boolean;
+    /** 草稿与已保存数据不一致。 */
+    dirty?: boolean;
   }>(),
-  { loading: false, locked: false, readonly: false },
+  { loading: false, locked: false, readonly: false, dirty: false },
 );
 
-const disabled = computed(() => props.locked || props.readonly);
+const viewOnly = computed(() => props.locked || props.readonly);
+const disabled = computed(() => viewOnly.value || props.loading);
 
 const dataScope = defineModel<DataScope>('dataScope', { default: '5' });
 const orgIds = defineModel<number[]>('orgIds', { default: () => [] });
@@ -62,12 +65,12 @@ const filteredOrgs = computed(() => {
   );
 });
 
-const selectableOrgs = computed(() => allOrgs.value.map((row) => row.org.orgId));
+const visibleOrgIds = computed(() => filteredOrgs.value.map((row) => row.org.orgId));
 
-const allSelected = computed(
+const allVisibleSelected = computed(
   () =>
-    selectableOrgs.value.length > 0 &&
-    selectableOrgs.value.every((orgId) => selectedSet.value.has(orgId)),
+    visibleOrgIds.value.length > 0 &&
+    visibleOrgIds.value.every((orgId) => selectedSet.value.has(orgId)),
 );
 
 function selectScope(scope: DataScope): void {
@@ -87,9 +90,15 @@ function toggleOrg(orgId: number): void {
 }
 
 function selectAllOrgs(): void {
-  if (!disabled.value) {
-    orgIds.value = selectableOrgs.value;
+  if (disabled.value) {
+    return;
   }
+  // 只补齐当前筛选结果，保留筛选之外已勾选的组织。
+  const next = new Set(orgIds.value);
+  for (const orgId of visibleOrgIds.value) {
+    next.add(orgId);
+  }
+  orgIds.value = [...next];
 }
 
 function clearOrgs(): void {
@@ -133,6 +142,7 @@ function clearOrgs(): void {
             )
           "
           :disabled="disabled"
+          :aria-pressed="dataScope === option.value"
           @click="selectScope(option.value)"
         >
           <span class="flex items-center justify-between gap-2">
@@ -171,10 +181,10 @@ function clearOrgs(): void {
           <Button
             variant="ghost"
             size="sm"
-            :disabled="disabled || allSelected"
+            :disabled="disabled || allVisibleSelected"
             @click="selectAllOrgs"
           >
-            全选
+            {{ keyword.trim() ? '全选当前筛选' : '全选' }}
           </Button>
           <Button variant="ghost" size="sm" :disabled="disabled" @click="clearOrgs">
             清空
@@ -210,12 +220,16 @@ function clearOrgs(): void {
     </div>
 
     <div
-      v-if="!disabled"
+      v-if="!viewOnly"
       class="flex items-center justify-between gap-3 border-t bg-muted/30 px-4 py-3"
     >
-      <span class="text-xs text-muted-foreground">
-        当前：{{ DATA_SCOPE_LABELS[dataScope] }}
-        <template v-if="dataScope === '2'">（{{ orgIds.length }} 个组织）</template>
+      <span class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>
+          当前：{{ DATA_SCOPE_LABELS[dataScope] }}
+          <template v-if="dataScope === '2'">（{{ orgIds.length }} 个组织）</template>
+        </span>
+        <span v-if="props.dirty" class="text-amber-700">有未保存修改</span>
+        <span v-if="props.loading" class="text-muted-foreground">正在保存…</span>
       </span>
       <div class="flex items-center gap-2">
         <Button variant="outline" size="sm" :disabled="props.loading" @click="emit('reset')">

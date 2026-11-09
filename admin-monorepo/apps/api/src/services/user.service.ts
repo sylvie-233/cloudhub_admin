@@ -10,7 +10,7 @@ import type {
   UserPermissionDetail,
   UserQuery,
 } from '@cloudhub/types';
-import { DATA_SCOPE_LABELS } from '@cloudhub/types';
+import { DATA_SCOPE_LABELS, PERMS } from '@cloudhub/types';
 import { normalizePagination, paginate, placeholders } from '@cloudhub/utils';
 
 import { dbClient, executeOn } from '../db/index.js';
@@ -43,7 +43,44 @@ import {
   getPermissionSources,
   getUserPermissionMenuIds,
   resolveDataScope,
+  userHasPermission,
 } from './permission.service.js';
+
+/** 内置超级管理员角色与账号的固定标识。 */
+const SUPER_ADMIN_ROLE_ID = 1;
+const SUPER_ADMIN_USER_ID = 1;
+
+/**
+ * 超级管理员角色只允许内置 admin 持有：
+ * 其他用户不能被授予，内置 admin 也不能被移除该角色。
+ */
+function assertSuperAdminRoleMembership(
+  targetUserId: number | null,
+  roleIds: number[],
+): void {
+  const includesSuperAdmin = roleIds.includes(SUPER_ADMIN_ROLE_ID);
+  if (targetUserId === SUPER_ADMIN_USER_ID) {
+    if (!includesSuperAdmin) {
+      throw new HttpError(400, '内置 admin 账号必须保留超级管理员角色');
+    }
+    return;
+  }
+  if (includesSuperAdmin) {
+    throw new HttpError(403, '超级管理员角色仅限内置 admin 账号');
+  }
+}
+
+/** 在新增/修改用户时附带角色，必须额外拥有「分配角色」权限。 */
+async function assertRoleChangeAllowed(
+  operatorUserId: number,
+  targetUserId: number | null,
+  roleIds: number[],
+): Promise<void> {
+  if (!(await userHasPermission(operatorUserId, PERMS.USER_AUTH_ROLE))) {
+    throw new HttpError(403, '没有分配角色的权限');
+  }
+  assertSuperAdminRoleMembership(targetUserId, roleIds);
+}
 
 async function findUserRow(userId: number): Promise<UserRow | null> {
   const stmt = selectUserById(userId);
@@ -187,7 +224,7 @@ export async function listUsers(
 ): Promise<PageResult<UserListItem>> {
   let orgFilterIds: number[] | null = null;
   if (query.orgId) {
-    orgFilterIds = await getOrgDescendantIds(query.orgId);
+    orgFilterIds = query.includeSub ? await getOrgDescendantIds(query.orgId) : [query.orgId];
   }
 
   const scope = await resolveDataScope(currentUserId);
@@ -239,6 +276,7 @@ export async function getUserDetail(userId: number): Promise<UserListItem> {
 export async function createUser(
   input: CreateUserInput,
   operator: string,
+  operatorUserId: number,
 ): Promise<UserListItem> {
   const dupStmt = selectUserIdByName(input.userName);
   const duplicated = await dbClient.queryOne<{ userId: number }>(
@@ -250,7 +288,10 @@ export async function createUser(
   }
 
   await assertPostsExist(input.postIds);
-  await assertRolesExist(input.roleIds ?? []);
+  if (input.roleIds) {
+    await assertRolesExist(input.roleIds);
+    await assertRoleChangeAllowed(operatorUserId, null, input.roleIds);
+  }
 
   const password = await hashPassword(input.password ?? DEFAULT_PASSWORD);
 
@@ -305,6 +346,7 @@ export async function updateUser(
   userId: number,
   input: UpdateUserInput,
   operator: string,
+  operatorUserId: number,
 ): Promise<UserListItem> {
   const current = await requireUser(userId);
 
@@ -313,6 +355,7 @@ export async function updateUser(
   }
   if (input.roleIds) {
     await assertRolesExist(input.roleIds);
+    await assertRoleChangeAllowed(operatorUserId, userId, input.roleIds);
   }
 
   const nickName = input.nickName ?? current.nickName;
@@ -401,6 +444,7 @@ export async function assignUserRoles(
 ): Promise<UserListItem> {
   await requireUser(userId);
   await assertRolesExist(roleIds);
+  assertSuperAdminRoleMembership(userId, roleIds);
 
   const unique = Array.from(new Set(roleIds));
   await dbClient.transaction(async (conn) => {

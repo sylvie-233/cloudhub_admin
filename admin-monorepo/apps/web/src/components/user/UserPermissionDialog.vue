@@ -188,7 +188,7 @@ watch(
             <div class="flex items-center gap-1.5">
               <span class="text-xs font-medium">{{ source.name }}</span>
               <Badge variant="outline">
-                {{ sourceTypeLabels[source.type] ?? source.type }}
+                {{ source.key === 'all' ? '综合' : (sourceTypeLabels[source.type] ?? source.type) }}
               </Badge>
             </div>
             <p class="mt-1 max-w-56 truncate text-[11px] text-muted-foreground">

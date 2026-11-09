@@ -27,11 +27,19 @@ const props = withDefaults(
     user: UserListItem | null;
     postOptions: MultiSelectOption[];
     postOptionsLoading?: boolean;
+    postOptionsError?: string;
     roleOptions: MultiSelectOption[];
+    canAssignRoles?: boolean;
     saving?: boolean;
     error?: string;
   }>(),
-  { postOptionsLoading: false, saving: false, error: '' },
+  {
+    postOptionsLoading: false,
+    postOptionsError: '',
+    canAssignRoles: false,
+    saving: false,
+    error: '',
+  },
 );
 
 const open = defineModel<boolean>('open', { default: false });
@@ -48,7 +56,7 @@ const emit = defineEmits<{
       sex: Sex;
       status: Status;
       postIds: number[];
-      roleIds: number[];
+      roleIds?: number[];
     },
   ];
 }>();
@@ -81,7 +89,10 @@ function init(): void {
       sex: props.user.sex,
       status: props.user.status,
       postIds: props.user.posts.map((post) => post.postId),
-      roleIds: props.user.roles.map((role) => role.roleId),
+      // 超级管理员角色仅内置 admin 可持有；历史上误授的 roleId=1 在下次保存时清理
+      roleIds: props.user.roles
+        .map((role) => role.roleId)
+        .filter((roleId) => props.user?.userId === 1 || roleId !== 1),
     };
   } else {
     form.value = {
@@ -140,7 +151,8 @@ function handleSubmit(): void {
     sex: form.value.sex,
     status: form.value.status,
     postIds: form.value.postIds,
-    roleIds: form.value.roleIds,
+    // 无分配角色权限时完全省略，避免把现有角色清空
+    ...(props.canAssignRoles ? { roleIds: form.value.roleIds } : {}),
   });
 }
 
@@ -157,7 +169,10 @@ watch(
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="max-h-[92vh] max-w-2xl overflow-y-auto">
+    <DialogContent
+      class="max-h-[92vh] max-w-2xl overflow-y-auto"
+      :close-disabled="props.saving"
+    >
       <DialogHeader>
         <DialogTitle>{{ isEdit ? '编辑用户' : '新增用户' }}</DialogTitle>
         <DialogDescription>
@@ -253,11 +268,22 @@ watch(
             search-placeholder="搜索岗位或组织"
             :max-chips="5"
           />
+          <p
+            v-if="props.postOptionsError"
+            class="mt-1.5 text-xs text-destructive"
+          >
+            {{ props.postOptionsError }}
+          </p>
         </FormItem>
 
         <FormItem
+          v-if="props.canAssignRoles"
           label="直接授予角色"
-          hint="角色只决定功能权限与数据范围，不改变组织归属"
+          :hint="
+            props.user?.userId === 1
+              ? '内置 admin 的超级管理员角色已锁定，不可移除'
+              : '角色只决定功能权限与数据范围，不改变组织归属'
+          "
           class="sm:col-span-2"
         >
           <MultiSelect

@@ -104,10 +104,16 @@ function handleSubmit(): void {
     localError.value = '请输入组织名称';
     return;
   }
+  const parentId = Number(form.value.parentId);
+  const parent = flattenOrgTree(props.orgs).find((row) => row.org.orgId === parentId);
+  if (parent && parent.org.orgLevel >= 9) {
+    localError.value = '组织树最多 9 级，不能在 9 级组织下继续新增下级';
+    return;
+  }
   localError.value = '';
   emit('submit', {
     orgId: props.org?.orgId,
-    parentId: Number(form.value.parentId),
+    parentId,
     orgName: name,
     orgCode: form.value.orgCode.trim() || undefined,
     orderNum: Number(form.value.orderNum) || 0,
@@ -128,7 +134,7 @@ watch(
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="max-w-xl">
+    <DialogContent class="max-w-xl" :close-disabled="props.saving">
       <DialogHeader>
         <DialogTitle>{{ isEdit ? '编辑组织' : '新增组织' }}</DialogTitle>
         <DialogDescription>
@@ -161,7 +167,7 @@ watch(
         </FormItem>
 
         <FormItem label="组织名称" for="org-name" required>
-          <Input id="org-name" v-model="form.orgName" placeholder="如：研发中心" maxlength="50" />
+          <Input id="org-name" v-model="form.orgName" placeholder="如：研发中心" maxlength="100" />
         </FormItem>
 
         <FormItem
@@ -169,7 +175,7 @@ watch(
           for="org-code"
           hint="留空自动生成；格式 ZZ + 日期 + 6 位序列"
         >
-          <Input id="org-code" v-model="form.orgCode" placeholder="自动生成" maxlength="30" />
+          <Input id="org-code" v-model="form.orgCode" placeholder="自动生成" maxlength="64" />
         </FormItem>
 
         <FormItem label="显示顺序" for="org-order" hint="数字越小越靠前">

@@ -1,4 +1,5 @@
 import type {
+  AffectedResult,
   Logininfor,
   LogininforQuery,
   LogininforStats,
@@ -25,13 +26,13 @@ export const logApi = {
   },
 
   /** 按 ID 批量删除 */
-  remove(ids: number[]): Promise<null> {
-    return request<null>('/logs/logininfor', { method: 'DELETE', body: { ids } });
+  remove(ids: number[]): Promise<AffectedResult> {
+    return request<AffectedResult>('/logs/logininfor', { method: 'DELETE', body: { ids } });
   },
 
   /** 清空全部登录日志 */
-  clean(): Promise<null> {
-    return request<null>('/logs/logininfor/clean', { method: 'DELETE' });
+  clean(): Promise<AffectedResult> {
+    return request<AffectedResult>('/logs/logininfor/clean', { method: 'DELETE' });
   },
 
   /** 导出当前筛选结果为 CSV */

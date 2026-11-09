@@ -18,7 +18,9 @@ const getStatsRoute = createRoute({
   path: '/stats',
   tags: ['工作台'],
   summary: '获取工作台统计',
-  description: '返回组织、岗位、用户、角色概览，组织人数 Top 8 与最近登录记录。',
+  description:
+    '返回组织、岗位、用户、角色概览，组织人数 Top 8 与最近登录记录。'
+    + '各区块按当前用户功能权限返回：无对应读取权限时计数为 0、列表为空。',
   responses: {
     200: successResponse(DashboardStatsSchema, '工作台统计数据'),
     ...errorResponses,

@@ -50,6 +50,13 @@ function handleSubmit(): void {
   emit('submit', password.value);
 }
 
+function handleConfirmEnter(event: KeyboardEvent): void {
+  if (event.isComposing || event.keyCode === 229) {
+    return;
+  }
+  handleSubmit();
+}
+
 watch(
   () => open.value,
   (opened) => {
@@ -64,7 +71,7 @@ watch(
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="max-w-md">
+    <DialogContent class="max-w-md" :close-disabled="props.saving">
       <DialogHeader>
         <DialogTitle>重置密码</DialogTitle>
         <DialogDescription>
@@ -91,7 +98,7 @@ watch(
             autocomplete="new-password"
             placeholder="请再次输入新密码"
             :disabled="props.saving"
-            @keyup.enter="handleSubmit"
+            @keydown.enter="handleConfirmEnter"
           />
         </FormItem>
       </div>

@@ -45,3 +45,23 @@ export function selectMenuChildCount(menuId: number): SqlStatement {
     params: [menuId],
   };
 }
+
+/** 查询占用同一路由地址的菜单，用于新增/修改时的重复校验。 */
+export function selectMenuPathConflict(
+  path: string,
+  excludeMenuId?: number,
+): SqlStatement {
+  const excludeSql = excludeMenuId === undefined ? '' : 'AND menu_id <> ?';
+  const params: Array<string | number> = [path];
+  if (excludeMenuId !== undefined) {
+    params.push(excludeMenuId);
+  }
+  return {
+    sql: `SELECT menu_id AS menuId, menu_name AS menuName
+            FROM sys_menu
+           WHERE menu_type = 'C' AND path = ?
+             ${excludeSql}
+           LIMIT 1`,
+    params,
+  };
+}

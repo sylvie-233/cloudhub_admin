@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PERMS } from '@cloudhub/types';
+import type { NavGroup } from '@/router/menu-routes';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,67 +9,69 @@ import {
   DropdownMenuTrigger,
   toast,
 } from '@cloudhub/ui';
-import {
-  Bell,
-  Building2,
-  KeyRound,
-  LayoutDashboard,
-  LogOut,
-  Menu,
-  Network,
-  ScrollText,
-  ShieldCheck,
-  Users,
-} from 'lucide-vue-next';
-import { computed } from 'vue';
-import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
+import { ChevronDown, LayoutDashboard, LogOut, Network } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
+import { RouterLink, RouterView, useRoute } from 'vue-router';
 
+import appRouter, { resetMenuRoutes, syncMenuRoutes } from '@/router';
+import { buildNavGroups } from '@/router/menu-routes';
 import { useAuthStore } from '@/stores/auth';
 
-interface NavItem {
-  label: string;
-  to: string;
-  icon: typeof LayoutDashboard;
-  perm?: string;
-}
-
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
-
 const route = useRoute();
-const router = useRouter();
 const auth = useAuthStore();
 
-const navGroups: NavGroup[] = [
+const navGroups = computed<NavGroup[]>(() => [
   {
+    key: 'overview',
     label: '概览',
-    items: [{ label: '工作台', to: 'dashboard', icon: LayoutDashboard }],
+    icon: LayoutDashboard,
+    items: [{ menuId: 0, label: '工作台', path: '/dashboard', icon: LayoutDashboard }],
+    collapsible: false,
   },
-  {
-    label: '系统权限',
-    items: [
-      { label: '组织管理', to: 'orgs', icon: Building2, perm: PERMS.ORG_LIST },
-      { label: '用户管理', to: 'users', icon: Users, perm: PERMS.USER_LIST },
-      { label: '角色管理', to: 'roles', icon: ShieldCheck, perm: PERMS.ROLE_LIST },
-      { label: '菜单管理', to: 'menus', icon: Menu, perm: PERMS.MENU_LIST },
-      { label: '权限管理', to: 'permissions', icon: KeyRound, perm: PERMS.PERM_LIST },
-      { label: '系统日志', to: 'logs', icon: ScrollText, perm: PERMS.LOGININFOR_LIST },
-    ],
-  },
-];
+  ...buildNavGroups(auth.profile?.menus ?? []),
+]);
 
-const visibleGroups = computed(() =>
-  navGroups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => auth.hasPerm(item.perm)),
-    }))
-    .filter((group) => group.items.length > 0),
-);
+/** 仅记录被手动折叠的菜单目录，默认全部展开。 */
+const collapsedGroupKeys = ref<Set<string>>(new Set());
+
+function isGroupCollapsed(key: string): boolean {
+  return collapsedGroupKeys.value.has(key);
+}
+
+function toggleGroup(key: string): void {
+  const next = new Set(collapsedGroupKeys.value);
+  if (next.has(key)) {
+    next.delete(key);
+  } else {
+    next.add(key);
+  }
+  collapsedGroupKeys.value = next;
+}
+
+/** 进入某个目录下的页面时自动展开，避免当前页面在侧边栏中不可见。 */
+function expandActiveGroup(): void {
+  const activeGroup = navGroups.value.find((group) =>
+    group.items.some((item) => item.path === route.path),
+  );
+  if (!activeGroup || !isGroupCollapsed(activeGroup.key)) {
+    return;
+  }
+  const next = new Set(collapsedGroupKeys.value);
+  next.delete(activeGroup.key);
+  collapsedGroupKeys.value = next;
+}
+
+watch(() => route.path, expandActiveGroup, { immediate: true });
 
 const pageTitle = computed(() => route.meta.title ?? '');
+
+/** 当前页面所属的菜单目录，用于补全面包屑层级；概览/功能等合成分组不展示。 */
+const menuGroupLabel = computed(() => {
+  const group = navGroups.value.find(
+    (item) => item.collapsible && item.items.some((navItem) => navItem.path === route.path),
+  );
+  return group?.label ?? null;
+});
 const currentPost = computed(() => auth.currentPost);
 const otherPosts = computed(() =>
   (auth.profile?.posts ?? []).filter((post) => post.postId !== currentPost.value?.postId),
@@ -77,14 +79,40 @@ const otherPosts = computed(() =>
 const roleNames = computed(() => (auth.profile?.roles ?? []).map((role) => role.roleName));
 const avatarText = computed(() => auth.displayName.slice(0, 1).toUpperCase());
 
-function isActive(name: string): boolean {
-  return route.name === name;
+function isActive(path: string): boolean {
+  return route.path === path;
 }
 
+// 权限刷新后同步路由；当前页面被移除时回到工作台，避免停留在失效页面
+watch(
+  () => auth.profile?.menus,
+  (menus) => {
+    if (!menus) {
+      return;
+    }
+    const changed = syncMenuRoutes(menus);
+    if (
+      changed &&
+      typeof route.name === 'string' &&
+      route.name.startsWith('menu-') &&
+      !appRouter.hasRoute(route.name)
+    ) {
+      toast.error('页面权限已变更，请重新选择页面');
+      void appRouter.replace({ name: 'dashboard' });
+    }
+  },
+);
+
 async function handleLogout(): Promise<void> {
-  await auth.logout();
+  try {
+    await auth.logout();
+  } catch {
+    // 退出接口失败时本地会话已在 store 中清理，继续跳转登录页
+  } finally {
+    resetMenuRoutes();
+  }
   toast.success('已退出登录');
-  await router.replace({ name: 'login' });
+  await appRouter.replace({ name: 'login' });
 }
 </script>
 
@@ -108,22 +136,44 @@ async function handleLogout(): Promise<void> {
         </span>
       </RouterLink>
 
-      <nav class="flex-1 overflow-y-auto px-2 py-3 lg:px-3">
-        <div v-for="group in visibleGroups" :key="group.label" class="mb-4">
-          <p
-            class="mb-1.5 hidden px-2 text-[11px] font-medium tracking-wide text-muted-foreground lg:block"
+      <nav class="flex-1 overflow-y-auto px-2 py-3 lg:px-3" aria-label="主导航">
+        <div v-for="group in navGroups" :key="group.key" class="mb-4">
+          <button
+            v-if="group.collapsible"
+            type="button"
+            class="mb-1.5 hidden w-full items-center gap-2.5 rounded-md px-3 py-1 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground lg:flex"
+            :aria-expanded="!isGroupCollapsed(group.key)"
+            :aria-controls="`nav-group-${group.key}`"
+            @click="toggleGroup(group.key)"
           >
-            {{ group.label }}
+            <component :is="group.icon" v-if="group.icon" class="size-[18px] shrink-0" />
+            <span class="min-w-0 flex-1 truncate text-left">{{ group.label }}</span>
+            <ChevronDown
+              class="size-4 shrink-0 transition-transform"
+              :class="isGroupCollapsed(group.key) ? '-rotate-90' : ''"
+            />
+          </button>
+          <p
+            v-else
+            class="mb-1.5 hidden items-center gap-2.5 px-3 py-1 text-sm font-medium text-muted-foreground lg:flex"
+          >
+            <component :is="group.icon" v-if="group.icon" class="size-[18px] shrink-0" />
+            <span class="truncate">{{ group.label }}</span>
           </p>
-          <div class="space-y-1">
+          <div
+            :id="`nav-group-${group.key}`"
+            class="space-y-1"
+            :class="group.collapsible && isGroupCollapsed(group.key) ? 'lg:hidden' : ''"
+          >
             <RouterLink
               v-for="item in group.items"
-              :key="item.to"
-              :to="{ name: item.to }"
+              :key="item.menuId"
+              :to="item.path"
               :title="item.label"
-              class="flex h-10 items-center justify-center gap-2.5 rounded-lg px-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground lg:justify-start lg:px-3"
+              :aria-current="isActive(item.path) ? 'page' : undefined"
+              class="flex h-10 items-center justify-center gap-2.5 rounded-lg px-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground lg:justify-start lg:pl-8 lg:pr-3"
               :class="
-                isActive(item.to)
+                isActive(item.path)
                   ? 'bg-accent font-medium text-accent-foreground'
                   : 'text-muted-foreground'
               "
@@ -150,22 +200,22 @@ async function handleLogout(): Promise<void> {
       <header
         class="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/90 px-4 backdrop-blur lg:px-5"
       >
-        <div class="flex min-w-0 items-center gap-1.5 text-sm">
-          <span class="text-muted-foreground">首页</span>
+        <nav class="flex min-w-0 items-center gap-1.5 text-sm" aria-label="面包屑导航">
+          <RouterLink
+            :to="{ name: 'dashboard' }"
+            class="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+          >
+            首页
+          </RouterLink>
+          <template v-if="menuGroupLabel">
+            <span class="text-muted-foreground">/</span>
+            <span class="truncate text-muted-foreground">{{ menuGroupLabel }}</span>
+          </template>
           <span class="text-muted-foreground">/</span>
           <span class="truncate font-medium">{{ pageTitle }}</span>
-        </div>
+        </nav>
 
         <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="relative flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            title="消息"
-          >
-            <Bell class="size-[18px]" />
-            <span class="absolute top-2 right-2 size-1.5 rounded-full bg-destructive" />
-          </button>
-
           <DropdownMenu>
             <DropdownMenuTrigger as-child>
               <button

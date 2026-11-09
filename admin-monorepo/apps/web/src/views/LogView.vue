@@ -35,7 +35,7 @@ import {
   Trash2,
   Users,
 } from 'lucide-vue-next';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import { logApi } from '@/api';
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
@@ -60,13 +60,18 @@ const canClean = computed(() => auth.hasPerm(PERMS.LOGININFOR_CLEAN));
 /* ==================== 概览 ==================== */
 const stats = ref<LogininforStats | null>(null);
 const statsLoading = ref(false);
+const statsError = ref('');
 
-async function loadStats(): Promise<void> {
+async function loadStats(): Promise<boolean> {
   statsLoading.value = true;
+  statsError.value = '';
   try {
     stats.value = await logApi.stats();
+    return true;
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : '登录日志统计加载失败');
+    stats.value = null;
+    statsError.value = error instanceof Error ? error.message : '登录日志统计加载失败';
+    return false;
   } finally {
     statsLoading.value = false;
   }
@@ -78,6 +83,7 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = 10;
 const listLoading = ref(false);
+const listError = ref('');
 
 const keyword = ref('');
 const filterStatus = ref<'all' | Status>('all');
@@ -112,35 +118,46 @@ function buildQuery(includePage: boolean): LogininforQuery {
 
 let listRequestId = 0;
 
-async function loadLogs(): Promise<void> {
+async function loadLogs(): Promise<boolean> {
   const requestId = ++listRequestId;
   listLoading.value = true;
+  listError.value = '';
   try {
     const result = await logApi.list(buildQuery(true));
     if (requestId !== listRequestId) {
-      return;
+      return false;
     }
     const maxPage = Math.max(1, Math.ceil(result.total / pageSize));
     if (page.value > maxPage) {
       page.value = maxPage;
-      await loadLogs();
-      return;
+      return await loadLogs();
     }
     logs.value = result.list;
     total.value = result.total;
     selectedIds.value = new Set();
+    return true;
   } catch (error) {
     if (requestId !== listRequestId) {
-      return;
+      return false;
     }
     logs.value = [];
     total.value = 0;
-    toast.error(error instanceof Error ? error.message : '登录日志加载失败');
+    selectedIds.value = new Set();
+    listError.value = error instanceof Error ? error.message : '登录日志加载失败';
+    return false;
   } finally {
     if (requestId === listRequestId) {
       listLoading.value = false;
     }
   }
+}
+
+/** 中文输入法确认候选词时不应触发查询。 */
+function handleKeywordEnter(event: KeyboardEvent): void {
+  if (event.isComposing || event.keyCode === 229) {
+    return;
+  }
+  applyFilters();
 }
 
 function applyFilters(): void {
@@ -162,8 +179,10 @@ function changePage(nextPage: number): void {
 }
 
 async function refreshAll(): Promise<void> {
-  await Promise.all([loadStats(), loadLogs()]);
-  toast.success('日志数据已刷新');
+  const [statsOk, listOk] = await Promise.all([loadStats(), loadLogs()]);
+  if (statsOk && listOk) {
+    toast.success('日志数据已刷新');
+  }
 }
 
 /* ==================== 选择与删除 ==================== */
@@ -218,8 +237,10 @@ function askDeleteSelected(): void {
 async function handleDeleteSelected(): Promise<void> {
   deleting.value = true;
   try {
-    await logApi.remove(deleteIds.value);
-    toast.success(`已删除 ${deleteIds.value.length} 条登录日志`);
+    const result = await logApi.remove(deleteIds.value);
+    toast.success(
+      result.affected > 0 ? `已删除 ${result.affected} 条登录日志` : '没有可删除的登录日志',
+    );
     deleteOpen.value = false;
     await Promise.all([loadLogs(), loadStats()]);
   } catch (error) {
@@ -235,8 +256,10 @@ const cleaning = ref(false);
 async function handleClean(): Promise<void> {
   cleaning.value = true;
   try {
-    await logApi.clean();
-    toast.success('登录日志已清空');
+    const result = await logApi.clean();
+    toast.success(
+      result.affected > 0 ? `已清空 ${result.affected} 条登录日志` : '当前没有登录日志',
+    );
     cleanOpen.value = false;
     page.value = 1;
     await Promise.all([loadLogs(), loadStats()]);
@@ -264,17 +287,18 @@ async function handleExport(): Promise<void> {
 
 const detailOpen = ref(false);
 const detailTarget = ref<Logininfor | null>(null);
+const detailLoading = ref(false);
+const detailError = ref('');
+const detailInfoId = ref<number | null>(null);
 let detailRequestId = 0;
 
-async function openDetail(log: Logininfor): Promise<void> {
-  if (!canQuery.value) {
-    return;
-  }
+async function fetchDetail(infoId: number): Promise<void> {
   const requestId = ++detailRequestId;
-  detailTarget.value = log;
-  detailOpen.value = true;
+  detailLoading.value = true;
+  detailError.value = '';
+  detailTarget.value = null;
   try {
-    const detail = await logApi.detail(log.infoId);
+    const detail = await logApi.detail(infoId);
     if (requestId !== detailRequestId) {
       return;
     }
@@ -283,9 +307,36 @@ async function openDetail(log: Logininfor): Promise<void> {
     if (requestId !== detailRequestId) {
       return;
     }
-    toast.error(error instanceof Error ? error.message : '日志详情加载失败');
+    detailError.value = error instanceof Error ? error.message : '日志详情加载失败';
+  } finally {
+    if (requestId === detailRequestId) {
+      detailLoading.value = false;
+    }
   }
 }
+
+function openDetail(log: Logininfor): void {
+  if (!canQuery.value) {
+    return;
+  }
+  detailInfoId.value = log.infoId;
+  detailOpen.value = true;
+  void fetchDetail(log.infoId);
+}
+
+function retryDetail(): void {
+  if (detailInfoId.value !== null) {
+    void fetchDetail(detailInfoId.value);
+  }
+}
+
+watch(detailOpen, (value) => {
+  if (!value) {
+    // 关闭后使仍在途的详情请求失效
+    detailRequestId += 1;
+    detailLoading.value = false;
+  }
+});
 
 function filterByUser(userName: string): void {
   keyword.value = userName;
@@ -335,31 +386,40 @@ onMounted(() => {
       </template>
     </PageHeader>
 
+    <div
+      v-if="statsError"
+      class="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-2.5 text-xs text-destructive"
+      role="alert"
+    >
+      <span class="min-w-0 flex-1">登录日志统计加载失败：{{ statsError }}</span>
+      <Button variant="outline" size="sm" :disabled="statsLoading" @click="loadStats">重试</Button>
+    </div>
+
     <div class="mb-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard
         label="今日登录"
-        :value="statsLoading ? '—' : (stats?.todayCount ?? 0)"
+        :value="statsLoading || !stats ? '—' : stats.todayCount"
         hint="包含成功与失败尝试"
         :icon="LogIn"
         tone="blue"
       />
       <StatCard
         label="今日成功"
-        :value="statsLoading ? '—' : (stats?.todaySuccess ?? 0)"
+        :value="statsLoading || !stats ? '—' : stats.todaySuccess"
         hint="status = '0'"
         :icon="CircleCheck"
         tone="green"
       />
       <StatCard
         label="今日失败"
-        :value="statsLoading ? '—' : (stats?.todayFail ?? 0)"
+        :value="statsLoading || !stats ? '—' : stats.todayFail"
         hint="status = '1'"
         :icon="CircleX"
         tone="amber"
       />
       <StatCard
         label="近 7 天账号"
-        :value="statsLoading ? '—' : (stats?.weekUniqueUsers ?? 0)"
+        :value="statsLoading || !stats ? '—' : stats.weekUniqueUsers"
         hint="按登录账号去重"
         :icon="Users"
         tone="violet"
@@ -377,7 +437,7 @@ onMounted(() => {
               v-model="keyword"
               placeholder="账号 / IP / 登录地点 / 消息"
               class="h-9 w-60 rounded-md border border-input bg-background pr-2 pl-8 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              @keyup.enter="applyFilters"
+              @keydown.enter="handleKeywordEnter"
             />
           </div>
         </div>
@@ -466,6 +526,17 @@ onMounted(() => {
                 </div>
               </TableCell>
             </TableRow>
+            <TableRow v-else-if="listError">
+              <TableCell :colspan="canRemove ? 9 : 8">
+                <div class="flex flex-col items-center gap-2 py-12 text-center" role="alert">
+                  <p class="text-sm text-destructive">{{ listError }}</p>
+                  <Button variant="outline" size="sm" @click="loadLogs">
+                    <RefreshCw class="size-3.5" />
+                    重试
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
             <template v-else-if="logs.length">
               <TableRow
                 v-for="log in logs"
@@ -534,7 +605,7 @@ onMounted(() => {
         </Table>
       </div>
 
-      <div class="border-t px-4 py-2">
+      <div v-if="!listError" class="border-t px-4 py-2">
         <Pagination
           :page="page"
           :total="total"
@@ -548,7 +619,10 @@ onMounted(() => {
     <LogDetailDialog
       v-model:open="detailOpen"
       :log="detailTarget"
+      :loading="detailLoading"
+      :error="detailError"
       @filter-user="filterByUser"
+      @retry="retryDetail"
     />
 
     <ConfirmDialog
@@ -558,6 +632,7 @@ onMounted(() => {
       confirm-text="删除"
       destructive
       :loading="deleting"
+      :close-disabled="deleting"
       @confirm="handleDeleteSelected"
     />
 
@@ -568,6 +643,7 @@ onMounted(() => {
       confirm-text="确认清空"
       destructive
       :loading="cleaning"
+      :close-disabled="cleaning"
       @confirm="handleClean"
     />
   </div>

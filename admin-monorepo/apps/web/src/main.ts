@@ -3,7 +3,7 @@ import { createPinia } from 'pinia';
 import { createApp } from 'vue';
 
 import App from './App.vue';
-import router from './router';
+import router, { resetMenuRoutes } from './router';
 import { setUnauthorizedHandler } from './api/client';
 import { useAuthStore } from './stores/auth';
 import './styles/index.css';
@@ -18,12 +18,18 @@ setUnauthorizedHandler(() => {
   if (!auth.isAuthenticated) {
     return;
   }
+  resetMenuRoutes();
   auth.clearSession();
   toast.error('登录状态已失效，请重新登录');
-  void router.replace({
-    name: 'login',
-    query: { redirect: router.currentRoute.value.fullPath },
-  });
+  if (router.currentRoute.value.name === 'login') {
+    return;
+  }
+  void router
+    .replace({
+      name: 'login',
+      query: { redirect: router.currentRoute.value.fullPath },
+    })
+    .catch(() => undefined);
 });
 
 app.mount('#app');

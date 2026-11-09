@@ -48,7 +48,9 @@ const createRouteDef = createRoute({
   path: '/',
   tags: ['用户'],
   summary: '新增用户',
-  description: '必须至少选择一个任职岗位，可同时分配角色。',
+  description:
+    '必须至少选择一个任职岗位，可同时分配角色；分配角色还需要 system:user:authRole 权限。'
+    + '超级管理员角色仅限内置 admin 账号。',
   middleware: [requirePerm(PERMS.USER_ADD)],
   request: {
     body: { content: jsonContent(createUserSchema), required: true },
@@ -97,6 +99,8 @@ const assignRolesRoute = createRoute({
   path: '/{id}/roles',
   tags: ['用户'],
   summary: '分配用户角色',
+  description:
+    '全量替换用户角色。内置 admin 必须保留超级管理员角色，超级管理员角色仅限内置 admin 账号。',
   middleware: [requirePerm(PERMS.USER_AUTH_ROLE)],
   request: {
     params: idParamsSchema,
@@ -128,6 +132,9 @@ const updateRoute = createRoute({
   path: '/{id}',
   tags: ['用户'],
   summary: '修改用户',
+  description:
+    '修改角色同样需要 system:user:authRole 权限；内置 admin 必须保留超级管理员角色，'
+    + '超级管理员角色仅限内置 admin 账号。',
   middleware: [requirePerm(PERMS.USER_EDIT)],
   request: {
     params: idParamsSchema,

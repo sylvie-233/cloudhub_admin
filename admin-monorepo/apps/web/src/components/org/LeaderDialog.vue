@@ -63,7 +63,7 @@ watch(
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="max-w-lg">
+    <DialogContent class="max-w-lg" :close-disabled="props.saving">
       <DialogHeader>
         <DialogTitle>设置责任岗位</DialogTitle>
         <DialogDescription>

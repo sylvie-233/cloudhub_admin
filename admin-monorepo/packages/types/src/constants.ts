@@ -77,3 +77,9 @@ export const MENU_TYPE_LABELS: Record<MenuType, string> = {
   C: '菜单',
   F: '动作',
 };
+
+/**
+ * 前端内置静态路由。C 菜单的 path 不得占用这些地址，
+ * 后端校验与前端动态路由共用同一份清单。
+ */
+export const RESERVED_MENU_PATHS = ['dashboard', 'login', 'not-found'] as const;

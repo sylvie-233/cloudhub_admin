@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Menu, MenuTreeNode, MenuType, Status } from '@cloudhub/types';
-import { MENU_TYPE_LABELS } from '@cloudhub/types';
+import { MENU_TYPE_LABELS, RESERVED_MENU_PATHS } from '@cloudhub/types';
 import {
   Button,
   Dialog,
@@ -20,18 +20,21 @@ import { Check, Loader2 } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 import FormItem from '@/components/common/FormItem.vue';
-import { collectMenuIds, flattenMenuTree } from '@/utils/format';
+import { collectMenuIds, flattenMenuTree, normalizeMenuPath } from '@/utils/format';
 import { MENU_ICON_OPTIONS, resolveMenuIcon } from '@/utils/icons';
+import { hasViewComponent } from '@/utils/view-components';
 
 const props = withDefaults(
   defineProps<{
     menu: Menu | null;
     menus: MenuTreeNode[];
+    menusLoading?: boolean;
+    menusError?: string;
     defaultParentId?: number | null;
     saving?: boolean;
     error?: string;
   }>(),
-  { defaultParentId: null, saving: false, error: '' },
+  { menusLoading: false, menusError: '', defaultParentId: null, saving: false, error: '' },
 );
 
 const open = defineModel<boolean>('open', { default: false });
@@ -139,30 +142,76 @@ function init(): void {
 
 function handleSubmit(): void {
   const menuName = form.value.menuName.trim();
+  const menuType = form.value.menuType;
+  const path = normalizeMenuPath(form.value.path);
+  const component = form.value.component.trim();
+  const orderNum = Number(form.value.orderNum);
+
   if (!menuName) {
     localError.value = '请输入菜单名称';
     return;
   }
-  if (form.value.menuType === 'C' && !form.value.path.trim()) {
-    localError.value = '菜单类型必须填写路由地址';
+
+  if (!form.value.orderNum.trim() || !Number.isInteger(orderNum) || orderNum < 0) {
+    localError.value = '显示顺序必须为不小于 0 的整数';
     return;
   }
-  if (form.value.menuType !== 'M' && !form.value.perms.trim()) {
+
+  if (menuType === 'F' && editingNode.value?.children.length) {
+    localError.value = '存在下级节点时不能改为动作类型，请先调整或删除下级菜单';
+    return;
+  }
+
+  if (menuType === 'C') {
+    if (!path) {
+      localError.value = '菜单类型必须填写路由地址';
+      return;
+    }
+    if (!/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(path)) {
+      localError.value = '路由地址只能包含字母、数字、下划线、短横线，可用 / 分隔层级';
+      return;
+    }
+    if (RESERVED_MENU_PATHS.some((reserved) => reserved === path.toLowerCase())) {
+      localError.value = `路由地址 /${path} 是内置静态页面，请换一个地址`;
+      return;
+    }
+    if (!component) {
+      localError.value = '菜单类型必须填写组件路径';
+      return;
+    }
+    if (!hasViewComponent(component)) {
+      localError.value = `组件 ${component} 不存在，请确认 views 目录下的文件路径`;
+      return;
+    }
+    const conflict = flattenMenuTree(props.menus).find(
+      (row) =>
+        row.menu.menuType === 'C' &&
+        row.menu.menuId !== props.menu?.menuId &&
+        normalizeMenuPath(row.menu.path).toLowerCase() === path.toLowerCase(),
+    );
+    if (conflict) {
+      localError.value = `路由地址 /${path} 已被菜单「${conflict.menu.menuName}」占用`;
+      return;
+    }
+  }
+
+  if (menuType !== 'M' && !form.value.perms.trim()) {
     localError.value = '菜单与动作类型必须填写权限标识';
     return;
   }
+
   localError.value = '';
   emit('submit', {
     menuId: props.menu?.menuId,
     parentId: Number(form.value.parentId),
     menuName,
-    orderNum: Number(form.value.orderNum) || 0,
+    orderNum,
     // 切换类型后隐藏字段仍保留原值，提交时按类型清理，避免目录/动作写入无关数据
-    path: form.value.menuType === 'F' ? '' : form.value.path.trim(),
-    component: form.value.menuType === 'C' ? form.value.component.trim() || null : null,
-    menuType: form.value.menuType,
+    path: menuType === 'C' ? path : '',
+    component: menuType === 'C' ? component : null,
+    menuType,
     status: form.value.status,
-    perms: form.value.menuType === 'M' ? null : form.value.perms.trim(),
+    perms: menuType === 'M' ? null : form.value.perms.trim(),
     icon: form.value.icon,
   });
 }
@@ -180,11 +229,14 @@ watch(
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="max-h-[92vh] max-w-2xl overflow-y-auto">
+    <DialogContent
+      class="max-h-[92vh] max-w-2xl overflow-y-auto"
+      :close-disabled="props.saving"
+    >
       <DialogHeader>
         <DialogTitle>{{ isEdit ? '编辑菜单' : '新增菜单' }}</DialogTitle>
         <DialogDescription>
-          菜单分三级：目录 M / 菜单 C / 动作 F；动作行的权限标识即后端鉴权点。
+          目录 M 仅作导航分组；菜单 C 的路由地址与组件路径决定前端页面；动作 F 只提供后端鉴权点。
         </DialogDescription>
       </DialogHeader>
 
@@ -211,7 +263,7 @@ watch(
           for="menu-parent"
           hint="动作节点不能作为上级菜单"
         >
-          <Select v-model="form.parentId">
+          <Select v-model="form.parentId" :disabled="props.menusLoading">
             <SelectTrigger id="menu-parent" class="w-full">
               <SelectValue placeholder="选择上级菜单" />
             </SelectTrigger>
@@ -226,6 +278,12 @@ watch(
               </SelectItem>
             </SelectContent>
           </Select>
+          <p v-if="props.menusLoading" class="mt-1 text-[11px] text-muted-foreground">
+            正在加载菜单树…
+          </p>
+          <p v-else-if="props.menusError" class="mt-1 text-[11px] text-destructive">
+            菜单树加载失败：{{ props.menusError }}，上级菜单可能不完整
+          </p>
         </FormItem>
 
         <FormItem label="显示顺序" for="menu-order" hint="数字越小越靠前">
@@ -233,10 +291,11 @@ watch(
         </FormItem>
 
         <FormItem
-          v-if="form.menuType !== 'F'"
+          v-if="form.menuType === 'C'"
           label="路由地址"
           for="menu-path"
-          :required="form.menuType === 'C'"
+          required
+          hint="布局下一级地址，如 users 对应 /users"
         >
           <Input id="menu-path" v-model="form.path" placeholder="如：users" maxlength="200" />
         </FormItem>
@@ -245,12 +304,13 @@ watch(
           v-if="form.menuType === 'C'"
           label="组件路径"
           for="menu-component"
-          hint="如 views/UserView.vue"
+          required
+          hint="views 目录下的 .vue 文件，如 views/UserView.vue"
         >
           <Input
             id="menu-component"
             v-model="form.component"
-            placeholder="可选"
+            placeholder="如：views/UserView.vue"
             maxlength="255"
           />
         </FormItem>
@@ -304,6 +364,8 @@ watch(
                     ? 'border-primary bg-accent text-accent-foreground'
                     : 'border-border hover:border-primary/30'
                 "
+                :aria-pressed="form.icon === option.key"
+                :aria-label="`选择图标：${option.name}`"
                 @click="form.icon = option.key"
               >
                 <component :is="option.component" class="size-3.5" />

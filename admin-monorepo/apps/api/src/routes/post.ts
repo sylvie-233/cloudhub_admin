@@ -45,7 +45,9 @@ const createRouteDef = createRoute({
   path: '/',
   tags: ['岗位'],
   summary: '新增岗位',
-  description: '可设置所属组织的责任岗位，设置后会同步更新 orgs.leader_post_id。',
+  description:
+    '可设置所属组织的责任岗位，设置后会同步更新 orgs.leader_post_id；'
+    + '设置责任岗位还需要 system:org:setLeader 权限。',
   middleware: [requirePerm(PERMS.POST_ADD)],
   request: {
     body: { content: jsonContent(createPostSchema), required: true },
@@ -76,6 +78,7 @@ const updateRoute = createRoute({
   path: '/{id}',
   tags: ['岗位'],
   summary: '修改岗位',
+  description: '变更责任岗位标记还需要 system:org:setLeader 权限。',
   middleware: [requirePerm(PERMS.POST_EDIT)],
   request: {
     params: idParamsSchema,

@@ -11,7 +11,9 @@
 --      ∪ 组织直授（sys_org_menu，沿 ancestors 向下继承）；岗位与组织不经角色。
 --   5. 数据权限单一来源：角色 data_scope（1全部 2自定义 3本组织 4本组织及以下 5仅本人）；
 --      无角色的用户兜底「仅本人」。
---   6. 菜单三级：M 目录 / C 菜单 / F 动作，动作即后端鉴权点（perms）。
+--   6. 菜单三级：M 目录 / C 菜单 / F 动作。C 的 path 是布局下的扁平一级路由（如 users → /users），
+--      component 是前端 views 目录下的 .vue 组件；前端登录后按授权菜单动态注册路由。
+--      M 仅作导航分组，F 仅作后端鉴权点，二者不配置 path/component。
 --   7. 授权入口统一在「权限管理」页：org/post 走 sys_post_menu、sys_org_menu，
 --      role 走 sys_role_menu + data_scope，对应动作 system:perm:save / dataScope。
 --   8. 登录日志（sys_logininfor）在「系统日志」页展示，支持账号/IP/结果/时间范围筛选。
@@ -184,8 +186,8 @@ CREATE TABLE `sys_menu` (
   `menu_name`   VARCHAR(50) NOT NULL                COMMENT '菜单名称',
   `parent_id`   BIGINT(20)  DEFAULT 0               COMMENT '父菜单ID',
   `order_num`   INT(4)      DEFAULT 0               COMMENT '显示顺序',
-  `path`        VARCHAR(200) DEFAULT ''             COMMENT '路由地址',
-  `component`   VARCHAR(255) DEFAULT NULL           COMMENT '组件路径',
+  `path`        VARCHAR(200) DEFAULT ''             COMMENT '路由地址（C：如 users → /users；M/F 为空）',
+  `component`   VARCHAR(255) DEFAULT NULL           COMMENT '组件路径（C：views 目录下的 .vue；M/F 为空）',
   `menu_type`   CHAR(1)     DEFAULT ''              COMMENT '菜单类型（M目录 C菜单 F动作）',
   `status`      CHAR(1)     DEFAULT '0'             COMMENT '菜单状态（0正常 1停用）',
   `perms`       VARCHAR(100) DEFAULT NULL           COMMENT '权限标识（如 system:post:list）',
@@ -278,13 +280,13 @@ INSERT INTO `sys_role` (`role_id`,`role_name`,`role_key`,`role_sort`,`data_scope
 --     顺序按页面实际菜单：系统管理 → 用户 / 组织 / 角色 / 菜单 / 权限 / 日志
 -- =============================================================================
 INSERT INTO `sys_menu` (`menu_id`,`menu_name`,`parent_id`,`order_num`,`path`,`component`,`menu_type`,`status`,`perms`,`icon`,`create_by`) VALUES
-(1000, '系统管理', 0,    1, 'system', NULL,                'M', '0', NULL,                       'settings','admin'),
-(1001, '用户管理', 1000, 1, 'user',   'system/user/index',  'C', '0', 'system:user:list',         'users',   'admin'),
-(1002, '组织管理', 1000, 2, 'org',    'system/org/index',   'C', '0', 'system:org:list',          'building','admin'),
-(1004, '角色管理', 1000, 3, 'role',   'system/role/index',  'C', '0', 'system:role:list',         'shield',  'admin'),
-(1005, '菜单管理', 1000, 4, 'menu',   'system/menu/index',  'C', '0', 'system:menu:list',         'menu',    'admin'),
-(1006, '权限管理', 1000, 5, 'perm',   'system/perm/index',  'C', '0', 'system:perm:list',         'key',     'admin'),
-(1007, '系统日志', 1000, 6, 'log',    'monitor/logininfor/index', 'C', '0', 'system:logininfor:list', 'log', 'admin'),
+(1000, '系统管理', 0,    1, '',       NULL,                  'M', '0', NULL,                       'settings','admin'),
+(1001, '用户管理', 1000, 1, 'users',  'views/UserView.vue',  'C', '0', 'system:user:list',         'users',   'admin'),
+(1002, '组织管理', 1000, 2, 'orgs',   'views/OrgView.vue',   'C', '0', 'system:org:list',          'building','admin'),
+(1004, '角色管理', 1000, 3, 'roles',  'views/RoleView.vue',  'C', '0', 'system:role:list',         'shield',  'admin'),
+(1005, '菜单管理', 1000, 4, 'menus',  'views/MenuView.vue',  'C', '0', 'system:menu:list',         'menu',    'admin'),
+(1006, '权限管理', 1000, 5, 'permissions', 'views/PermissionView.vue', 'C', '0', 'system:perm:list', 'key', 'admin'),
+(1007, '系统日志', 1000, 6, 'logs',   'views/LogView.vue',   'C', '0', 'system:logininfor:list',   'log',     'admin'),
 -- 用户管理动作
 (10011,'用户查询', 1001, 1, '', NULL, 'F', '0', 'system:user:query',    '', 'admin'),
 (10012,'用户新增', 1001, 2, '', NULL, 'F', '0', 'system:user:add',      '', 'admin'),

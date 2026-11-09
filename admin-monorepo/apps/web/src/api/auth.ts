@@ -12,9 +12,13 @@ export const authApi = {
     });
   },
 
-  /** 当前登录用户资料、权限与菜单 */
+  /**
+   * 当前登录用户资料、权限与菜单。
+   * 路由守卫会捕获 401 并按原地址跳转登录页，因此不触发全局 401 处理，
+   * 避免与守卫的重定向竞争导致 redirect 参数丢失。
+   */
   me(): Promise<UserProfile> {
-    return request<UserProfile>('/auth/me');
+    return request<UserProfile>('/auth/me', { skipUnauthorizedHandling: true });
   },
 
   /** 续期访问令牌 */

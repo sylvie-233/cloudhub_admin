@@ -22,15 +22,23 @@ export async function getPost(c: AppContext): Promise<Response> {
 /** POST /api/posts */
 export async function createPost(c: AppContext): Promise<Response> {
   const input = await parseJson(c, createPostSchema);
-  const operator = c.get('currentUser').userName;
-  return success(c, await postService.createPost(input, operator), '岗位创建成功');
+  const { userId, userName } = c.get('currentUser');
+  return success(
+    c,
+    await postService.createPost(input, userName, userId),
+    '岗位创建成功',
+  );
 }
 
 /** PUT /api/posts/:id */
 export async function updatePost(c: AppContext): Promise<Response> {
   const input = await parseJson(c, updatePostSchema);
-  const operator = c.get('currentUser').userName;
-  return success(c, await postService.updatePost(parseId(c), input, operator), '岗位信息已更新');
+  const { userId, userName } = c.get('currentUser');
+  return success(
+    c,
+    await postService.updatePost(parseId(c), input, userName, userId),
+    '岗位信息已更新',
+  );
 }
 
 /** DELETE /api/posts/:id */

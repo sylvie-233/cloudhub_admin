@@ -39,11 +39,12 @@ const searchRef = ref<HTMLInputElement | null>(null);
 const listRef = ref<HTMLElement | null>(null);
 const activeIndex = ref(-1);
 
-const selectedOptions = computed(() => {
+/** 已选值即使暂时不在 options 中（加载中/加载失败）也保留占位，避免静默隐藏。 */
+const selectedOptions = computed<MultiSelectOption[]>(() => {
   const map = new Map(props.options.map((option) => [option.value, option]));
-  return model.value
-    .map((value) => map.get(value))
-    .filter((option): option is MultiSelectOption => Boolean(option));
+  return model.value.map(
+    (value) => map.get(value) ?? { value, label: `选项 #${value}` },
+  );
 });
 
 const visibleChips = computed(() => selectedOptions.value.slice(0, props.maxChips));
@@ -146,6 +147,15 @@ function selectActive(): void {
   }
 }
 
+/** 中文输入法确认候选词时不应触发选项选择。 */
+function handleSearchEnter(event: KeyboardEvent): void {
+  if (event.isComposing || event.keyCode === 229) {
+    return;
+  }
+  event.preventDefault();
+  selectActive();
+}
+
 function handleOpenAutoFocus(event: Event): void {
   event.preventDefault();
   void nextTick(() => searchRef.value?.focus());
@@ -171,7 +181,9 @@ watch(keyword, () => {
 watch(
   () => props.options.length,
   () => {
-    if (activeIndex.value >= filteredOptions.value.length) {
+    if (activeIndex.value < 0 && filteredOptions.value.length) {
+      activeIndex.value = 0;
+    } else if (activeIndex.value >= filteredOptions.value.length) {
       activeIndex.value = filteredOptions.value.length ? 0 : -1;
     }
   },
@@ -185,7 +197,7 @@ watch(
         :id="props.id ?? triggerId"
         role="combobox"
         :aria-expanded="open"
-        :aria-controls="listboxId"
+        :aria-controls="open ? listboxId : undefined"
         :aria-label="props.ariaLabel"
         :aria-disabled="props.disabled || undefined"
         aria-haspopup="listbox"
@@ -203,7 +215,7 @@ watch(
         @keydown.space.self.prevent="toggleOpen"
       >
         <span v-if="!selectedOptions.length" class="px-1 text-muted-foreground">
-          {{ props.placeholder }}
+          {{ props.loading ? '正在加载选项…' : props.placeholder }}
         </span>
         <span
           v-for="option in visibleChips"
@@ -215,6 +227,8 @@ watch(
             type="button"
             class="rounded p-0.5 text-muted-foreground hover:text-foreground"
             title="移除"
+            :disabled="props.disabled"
+            :tabindex="props.disabled ? -1 : undefined"
             @click.stop="removeOption(option.value)"
           >
             <X class="size-3" />
@@ -250,7 +264,7 @@ watch(
             class="h-8 w-full rounded-md border border-input bg-background px-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             @keydown.down.prevent="moveActive(1)"
             @keydown.up.prevent="moveActive(-1)"
-            @keydown.enter.prevent="selectActive"
+            @keydown.enter="handleSearchEnter"
             @keydown.esc.stop.prevent="close"
           />
           <button
@@ -268,7 +282,14 @@ watch(
           正在加载选项…
         </div>
 
-        <div v-else :id="listboxId" ref="listRef" role="listbox" class="min-h-0 flex-1 overflow-y-auto p-1">
+        <div
+          v-else
+          :id="listboxId"
+          ref="listRef"
+          role="listbox"
+          aria-multiselectable="true"
+          class="min-h-0 flex-1 overflow-y-auto p-1"
+        >
           <template v-for="(option, index) in filteredOptions" :key="option.value">
             <div
               v-if="groupFor(index)"

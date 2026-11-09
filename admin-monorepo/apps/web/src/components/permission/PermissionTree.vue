@@ -22,12 +22,15 @@ const props = withDefaults(
     readonly?: boolean;
     locked?: boolean;
     loading?: boolean;
+    /** 保存请求进行中，暂时禁止修改勾选。 */
+    busy?: boolean;
     emptyText?: string;
   }>(),
   {
     readonly: false,
     locked: false,
     loading: false,
+    busy: false,
     emptyText: '暂无可授权菜单',
   },
 );
@@ -63,6 +66,10 @@ const allNodeMap = computed(() => {
 });
 
 const selectedSet = computed(() => new Set(selected.value));
+const disabledUi = computed(() => props.readonly || props.locked || props.busy);
+const stoppedNodeCount = computed(
+  () => [...allNodeMap.value.values()].filter((node) => node.status === '1').length,
+);
 
 /** 搜索命中节点 + 其祖先 + 其子孙，保证上下文完整。 */
 const visibleIds = computed<Set<number> | null>(() => {
@@ -121,7 +128,9 @@ const visibleRows = computed(() => {
   return rows.filter((row) => !visibleIds.value || visibleIds.value.has(row.menu.menuId));
 });
 
-const selectableNodes = computed(() => [...allNodeMap.value.values()]);
+const selectableNodes = computed(() =>
+  [...allNodeMap.value.values()].filter((node) => node.status === '0'),
+);
 
 const selectedLeafCount = computed(
   () =>
@@ -136,8 +145,23 @@ const allSelected = computed(
     selectableNodes.value.every((node) => selectedSet.value.has(node.menuId)),
 );
 
+/** 停用菜单不参与鉴权，只允许取消历史上已存在的授权，不能新授予。 */
+function grantableIds(node: MenuTreeNode): number[] {
+  return collectMenuIds(node).filter((id) => allNodeMap.value.get(id)?.status === '0');
+}
+
+function isNodeDisabled(node: MenuTreeNode): boolean {
+  if (disabledUi.value) {
+    return true;
+  }
+  return node.status === '1' && !selectedSet.value.has(node.menuId);
+}
+
 function nodeState(node: MenuTreeNode): 'checked' | 'indeterminate' | 'unchecked' {
-  const ids = collectMenuIds(node);
+  if (node.status === '1') {
+    return selectedSet.value.has(node.menuId) ? 'checked' : 'unchecked';
+  }
+  const ids = grantableIds(node);
   if (node.children.length === 0) {
     return selectedSet.value.has(node.menuId) ? 'checked' : 'unchecked';
   }
@@ -156,7 +180,9 @@ function addAncestors(menuId: number, target: Set<number>): void {
   const visited = new Set<number>();
   while (parentId > 0 && !visited.has(parentId)) {
     visited.add(parentId);
-    target.add(parentId);
+    if (allNodeMap.value.get(parentId)?.status === '0') {
+      target.add(parentId);
+    }
     parentId = parentMap.value.get(parentId) ?? 0;
   }
 }
@@ -180,11 +206,22 @@ function pruneEmptyAncestors(menuId: number, target: Set<number>): void {
 }
 
 function toggleNode(node: MenuTreeNode): void {
-  if (props.readonly || props.locked) {
+  if (disabledUi.value) {
     return;
   }
   const next = new Set(selected.value);
-  const ids = collectMenuIds(node);
+
+  if (node.status === '1') {
+    // 停用节点仅允许取消残留授权，点击不再向其子树授予权限。
+    if (!next.delete(node.menuId)) {
+      return;
+    }
+    pruneEmptyAncestors(node.menuId, next);
+    selected.value = [...next];
+    return;
+  }
+
+  const ids = grantableIds(node);
   const fullySelected = ids.every((id) => next.has(id));
   if (fullySelected) {
     for (const id of ids) {
@@ -223,14 +260,14 @@ function collapseAll(): void {
 }
 
 function selectAll(): void {
-  if (props.readonly || props.locked) {
+  if (disabledUi.value) {
     return;
   }
   selected.value = selectableNodes.value.map((node) => node.menuId);
 }
 
 function clearAll(): void {
-  if (props.readonly || props.locked) {
+  if (disabledUi.value) {
     return;
   }
   selected.value = [];
@@ -268,8 +305,20 @@ function rowIcon(node: MenuTreeNode) {
         <Button variant="ghost" size="sm" @click="collapseAll">收起</Button>
       </div>
       <div v-if="!props.readonly && !props.locked" class="flex items-center gap-0.5">
-        <Button variant="ghost" size="sm" :disabled="allSelected" @click="selectAll">全选</Button>
-        <Button variant="ghost" size="sm" :disabled="!selected.length" @click="clearAll">
+        <Button
+          variant="ghost"
+          size="sm"
+          :disabled="allSelected || props.busy"
+          @click="selectAll"
+        >
+          全选
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          :disabled="!selected.length || props.busy"
+          @click="clearAll"
+        >
           清空
         </Button>
       </div>
@@ -278,6 +327,19 @@ function rowIcon(node: MenuTreeNode) {
     <div v-if="props.locked" class="flex items-start gap-2 border-b bg-amber-50 px-4 py-2.5 text-xs text-amber-700">
       <Lock class="mt-0.5 size-3.5 shrink-0" />
       超级管理员默认拥有全部权限，菜单授权不可修改。
+    </div>
+    <div
+      v-else-if="props.busy"
+      class="flex items-start gap-2 border-b bg-muted px-4 py-2.5 text-xs text-muted-foreground"
+    >
+      <Lock class="mt-0.5 size-3.5 shrink-0" />
+      正在保存菜单权限，保存完成前不可修改勾选。
+    </div>
+    <div
+      v-if="stoppedNodeCount > 0 && !props.readonly && !props.locked"
+      class="border-b bg-amber-50/70 px-4 py-2 text-[11px] text-amber-700"
+    >
+      停用菜单不参与鉴权，不可新授予；已选中的停用项可点击取消。
     </div>
 
     <div class="max-h-[32rem] min-h-48 flex-1 overflow-y-auto py-1">
@@ -295,6 +357,8 @@ function rowIcon(node: MenuTreeNode) {
               type="button"
               class="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               :title="collapsed.has(row.menu.menuId) ? '展开' : '收起'"
+              :aria-label="collapsed.has(row.menu.menuId) ? '展开' : '收起'"
+              :aria-expanded="!collapsed.has(row.menu.menuId)"
               @click="toggleCollapsed(row.menu.menuId)"
             >
               <ChevronRight v-if="collapsed.has(row.menu.menuId)" class="size-3.5" />
@@ -310,7 +374,7 @@ function rowIcon(node: MenuTreeNode) {
                     ? 'indeterminate'
                     : false
               "
-              :disabled="props.readonly || props.locked"
+              :disabled="isNodeDisabled(row.menu)"
               :aria-label="`授权 ${row.menu.menuName}`"
               @update:model-value="toggleNode(row.menu)"
             />
@@ -370,7 +434,7 @@ function rowIcon(node: MenuTreeNode) {
         已选 <b class="text-foreground">{{ selected.length }}</b> 项菜单/动作，其中叶子权限
         <b class="text-foreground">{{ selectedLeafCount }}</b> 项
       </span>
-      <span>目录、菜单、动作均会随勾选级联</span>
+      <span>目录、菜单、动作均会随勾选级联（停用项除外）</span>
     </div>
   </div>
 </template>

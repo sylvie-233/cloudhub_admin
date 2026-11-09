@@ -10,5 +10,9 @@ declare module 'vue-router' {
     perm?: string;
     /** 是否允许未登录访问 */
     public?: boolean;
+    /** 动态菜单路由对应的菜单图标标识 */
+    icon?: string;
+    /** 动态菜单路由对应的菜单 ID */
+    menuId?: number;
   }
 }

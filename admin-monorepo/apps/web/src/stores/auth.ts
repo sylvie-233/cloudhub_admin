@@ -9,6 +9,8 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref(getToken());
   const profile = ref<UserProfile | null>(null);
   const loading = ref(false);
+  /** 资料加载遇到非鉴权类错误（如网络中断）时为 true，避免登录页反复跳回工作台。 */
+  const profileError = ref(false);
 
   const isAuthenticated = computed(() => token.value.length > 0);
   const currentPost = computed(() => profile.value?.currentPost ?? null);
@@ -33,6 +35,7 @@ export const useAuthStore = defineStore('auth', () => {
       token.value = result.token;
       setToken(result.token);
       profile.value = result.profile;
+      profileError.value = false;
       return result.profile;
     } finally {
       loading.value = false;
@@ -49,6 +52,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
     const data = await authApi.me();
     profile.value = data;
+    profileError.value = false;
     return data;
   }
 
@@ -56,6 +60,7 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = '';
     setToken('');
     profile.value = null;
+    profileError.value = false;
   }
 
   async function logout(): Promise<void> {
@@ -72,6 +77,7 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     profile,
     loading,
+    profileError,
     isAuthenticated,
     currentPost,
     permissions,

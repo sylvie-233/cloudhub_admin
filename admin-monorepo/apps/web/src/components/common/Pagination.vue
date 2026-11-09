@@ -19,9 +19,12 @@ const emit = defineEmits<{
 
 const pageCount = computed(() => Math.max(1, Math.ceil(props.total / Math.max(1, props.pageSize))));
 
+/** 请求失败等情况可能留下越界页码，展示与按钮统一按合法范围收敛。 */
+const currentPage = computed(() => Math.min(Math.max(1, props.page), pageCount.value));
+
 const visiblePages = computed<(number | 'ellipsis')[]>(() => {
   const total = pageCount.value;
-  const current = props.page;
+  const current = currentPage.value;
   if (total <= 7) {
     return Array.from({ length: total }, (_, index) => index + 1);
   }
@@ -44,7 +47,7 @@ const visiblePages = computed<(number | 'ellipsis')[]>(() => {
 });
 
 function go(page: number): void {
-  if (props.disabled || page < 1 || page > pageCount.value || page === props.page) {
+  if (props.disabled || page < 1 || page > pageCount.value || page === currentPage.value) {
     return;
   }
   emit('change', page);
@@ -54,15 +57,16 @@ function go(page: number): void {
 <template>
   <div class="flex flex-wrap items-center justify-between gap-3 px-1 pt-3">
     <span class="text-xs text-muted-foreground">
-      共 <b class="text-foreground">{{ props.total }}</b> 条，第 {{ props.page }} / {{ pageCount }} 页
+      共 <b class="text-foreground">{{ props.total }}</b> 条，第 {{ currentPage }} / {{ pageCount }} 页
     </span>
     <div class="flex items-center gap-1">
       <Button
         variant="ghost"
         size="sm"
         class="size-8 p-0"
-        :disabled="props.disabled || props.page <= 1"
-        @click="go(props.page - 1)"
+        :disabled="props.disabled || currentPage <= 1"
+        aria-label="上一页"
+        @click="go(currentPage - 1)"
       >
         <ChevronLeft class="size-4" />
       </Button>
@@ -70,9 +74,10 @@ function go(page: number): void {
         <span v-if="item === 'ellipsis'" class="px-1 text-xs text-muted-foreground">…</span>
         <Button
           v-else
-          :variant="item === props.page ? 'default' : 'ghost'"
+          :variant="item === currentPage ? 'default' : 'ghost'"
           size="sm"
           class="size-8 p-0 text-xs"
+          :aria-current="item === currentPage ? 'page' : undefined"
           :disabled="props.disabled"
           @click="go(item)"
         >
@@ -83,8 +88,9 @@ function go(page: number): void {
         variant="ghost"
         size="sm"
         class="size-8 p-0"
-        :disabled="props.disabled || props.page >= pageCount"
-        @click="go(props.page + 1)"
+        :disabled="props.disabled || currentPage >= pageCount"
+        aria-label="下一页"
+        @click="go(currentPage + 1)"
       >
         <ChevronRight class="size-4" />
       </Button>

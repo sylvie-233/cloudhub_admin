@@ -25,15 +25,23 @@ export async function getUser(c: AppContext): Promise<Response> {
 /** POST /api/users */
 export async function createUser(c: AppContext): Promise<Response> {
   const input = await parseJson(c, createUserSchema);
-  const operator = c.get('currentUser').userName;
-  return success(c, await userService.createUser(input, operator), '用户创建成功');
+  const { userId, userName } = c.get('currentUser');
+  return success(
+    c,
+    await userService.createUser(input, userName, userId),
+    '用户创建成功',
+  );
 }
 
 /** PUT /api/users/:id */
 export async function updateUser(c: AppContext): Promise<Response> {
   const input = await parseJson(c, updateUserSchema);
-  const operator = c.get('currentUser').userName;
-  return success(c, await userService.updateUser(parseId(c), input, operator), '用户信息已更新');
+  const { userId, userName } = c.get('currentUser');
+  return success(
+    c,
+    await userService.updateUser(parseId(c), input, userName, userId),
+    '用户信息已更新',
+  );
 }
 
 /** DELETE /api/users/:id */

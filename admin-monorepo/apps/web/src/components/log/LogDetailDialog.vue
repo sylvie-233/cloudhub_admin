@@ -9,15 +9,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@cloudhub/ui';
+import { Loader2 } from 'lucide-vue-next';
 
 import StatusBadge from '@/components/common/StatusBadge.vue';
 
-const props = defineProps<{
-  log: Logininfor | null;
-}>();
+const props = withDefaults(
+  defineProps<{
+    log: Logininfor | null;
+    loading?: boolean;
+    error?: string;
+  }>(),
+  { loading: false, error: '' },
+);
 
 const emit = defineEmits<{
   filterUser: [userName: string];
+  retry: [];
 }>();
 
 const open = defineModel<boolean>('open', { default: false });
@@ -44,13 +51,26 @@ function handleFilterUser(): void {
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="max-w-xl">
+    <DialogContent class="max-h-[90vh] max-w-xl overflow-y-auto" :aria-busy="props.loading">
       <DialogHeader>
         <DialogTitle>登录日志详情</DialogTitle>
         <DialogDescription>记录用户登录时的账号、岗位与终端环境。</DialogDescription>
       </DialogHeader>
 
-      <div v-if="props.log" class="overflow-hidden rounded-lg border">
+      <div
+        v-if="props.loading"
+        class="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground"
+      >
+        <Loader2 class="size-4 animate-spin" />
+        正在加载日志详情…
+      </div>
+
+      <div v-else-if="props.error" class="flex flex-col items-center gap-3 py-10 text-center">
+        <p class="text-sm text-destructive">{{ props.error }}</p>
+        <Button variant="outline" size="sm" @click="emit('retry')">重试</Button>
+      </div>
+
+      <div v-else-if="props.log" class="overflow-hidden rounded-lg border">
         <div
           v-for="field in fields"
           :key="field.key"
@@ -85,7 +105,9 @@ function handleFilterUser(): void {
 
       <DialogFooter>
         <Button variant="outline" @click="open = false">关闭</Button>
-        <Button v-if="props.log" @click="handleFilterUser">查看该账号日志</Button>
+        <Button v-if="props.log && !props.loading && !props.error" @click="handleFilterUser">
+          查看该账号日志
+        </Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>

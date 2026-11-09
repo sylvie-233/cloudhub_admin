@@ -1,4 +1,4 @@
-import type { DataScope, GrantSource, UserMenuNode } from '@cloudhub/types';
+import type { DataScope, GrantSource, Perm, UserMenuNode } from '@cloudhub/types';
 
 import { dbClient } from '../db/index.js';
 import {
@@ -82,6 +82,11 @@ export async function getUserPermissionStrings(userId: number): Promise<string[]
   const stmt = selectPermissionStrings(userId);
   const rows = await dbClient.query<{ perms: string | null }>(stmt.sql, stmt.params);
   return rows.map((row) => row.perms).filter((perm): perm is string => Boolean(perm));
+}
+
+/** 判断用户是否拥有指定功能权限（角色 ∪ 岗位 ∪ 组织）。 */
+export async function userHasPermission(userId: number, perm: Perm): Promise<boolean> {
+  return (await getUserPermissionStrings(userId)).includes(perm);
 }
 
 /** 用户可访问的菜单树（仅目录与菜单，动作不参与导航）。 */

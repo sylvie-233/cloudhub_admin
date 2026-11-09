@@ -4,14 +4,17 @@ import type {
   MenuQuery,
   MenuRow,
   MenuTreeNode,
+  MenuType,
   UpdateMenuInput,
 } from '@cloudhub/types';
+import { RESERVED_MENU_PATHS } from '@cloudhub/types';
 
 import { dbClient, executeOn } from '../db/index.js';
 import {
   allMenus,
   selectMenuById,
   selectMenuChildCount,
+  selectMenuPathConflict,
 } from '../sql/menu.sql.js';
 import type { MenuDbRow } from '../sql/menu.sql.js';
 import { HttpError } from '../utils/http.js';
@@ -31,6 +34,89 @@ async function requireMenu(menuId: number): Promise<MenuDbRow> {
 
 function toMenu(row: MenuDbRow): Menu {
   return { ...row };
+}
+
+const MENU_PATH_PATTERN = /^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/;
+const MENU_COMPONENT_PATTERN = /^views\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.vue$/;
+
+interface MenuRouteFields {
+  path: string;
+  component: string | null;
+}
+
+/** 路由地址规范化：去空白、反斜杠转斜杠、去掉首尾斜杠并折叠重复斜杠。 */
+function normalizeMenuPath(path: string | null | undefined): string {
+  return (path ?? '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '')
+    .replace(/\/+/g, '/');
+}
+
+/** 组件路径规范化：统一为 views/ 开头、.vue 结尾的写法。 */
+function normalizeMenuComponent(component: string | null | undefined): string {
+  let value = (component ?? '').trim().replace(/\\/g, '/').replace(/^(?:\.?\/)+/, '');
+  if (!value) {
+    return '';
+  }
+  if (!value.startsWith('views/')) {
+    value = `views/${value}`;
+  }
+  if (!value.endsWith('.vue')) {
+    value = `${value}.vue`;
+  }
+  return value;
+}
+
+/** 校验 C 菜单的路由地址与组件路径；M/F 不参与前端路由，统一清空。 */
+async function resolveMenuRouteFields(
+  menuType: MenuType,
+  path: string | null | undefined,
+  component: string | null | undefined,
+  selfId?: number,
+): Promise<MenuRouteFields> {
+  if (menuType !== 'C') {
+    return { path: '', component: null };
+  }
+
+  const normalizedPath = normalizeMenuPath(path);
+  if (!normalizedPath) {
+    throw new HttpError(400, '菜单类型必须填写路由地址');
+  }
+  if (!MENU_PATH_PATTERN.test(normalizedPath)) {
+    throw new HttpError(
+      400,
+      '路由地址只能包含字母、数字、下划线、短横线，可用 / 分隔层级',
+    );
+  }
+  if (RESERVED_MENU_PATHS.some((item) => item === normalizedPath.toLowerCase())) {
+    throw new HttpError(400, `路由地址 /${normalizedPath} 是内置静态页面，不能用于菜单`);
+  }
+
+  const normalizedComponent = normalizeMenuComponent(component);
+  if (!normalizedComponent) {
+    throw new HttpError(400, '菜单类型必须填写组件路径');
+  }
+  if (!MENU_COMPONENT_PATTERN.test(normalizedComponent)) {
+    throw new HttpError(
+      400,
+      '组件路径必须为 views 目录下的 .vue 文件，如 views/UserView.vue',
+    );
+  }
+
+  const conflictStmt = selectMenuPathConflict(normalizedPath, selfId);
+  const conflict = await dbClient.queryOne<{ menuId: number; menuName: string }>(
+    conflictStmt.sql,
+    conflictStmt.params,
+  );
+  if (conflict) {
+    throw new HttpError(
+      400,
+      `路由地址 /${normalizedPath} 已被菜单「${conflict.menuName}」占用`,
+    );
+  }
+
+  return { path: normalizedPath, component: normalizedComponent };
 }
 
 async function loadAllMenus(): Promise<MenuDbRow[]> {
@@ -147,6 +233,11 @@ export async function createMenu(
 ): Promise<Menu> {
   const parentId = input.parentId ?? 0;
   await assertParent(parentId);
+  const routeFields = await resolveMenuRouteFields(
+    input.menuType,
+    input.path,
+    input.component,
+  );
 
   const menuId = await dbClient.transaction(async (conn) => {
     const result = await executeOn(
@@ -158,8 +249,8 @@ export async function createMenu(
         input.menuName,
         parentId,
         input.orderNum ?? 0,
-        input.path ?? '',
-        input.component ?? null,
+        routeFields.path,
+        routeFields.component,
         input.menuType,
         input.status ?? '0',
         input.perms ?? null,
@@ -220,6 +311,13 @@ export async function updateMenu(
     }
   }
 
+  const routeFields = await resolveMenuRouteFields(
+    menuType,
+    input.path ?? current.path,
+    input.component === undefined ? current.component : input.component,
+    menuId,
+  );
+
   await dbClient.execute(
     `UPDATE sys_menu
         SET menu_name = ?, parent_id = ?, order_num = ?, path = ?, component = ?,
@@ -229,8 +327,8 @@ export async function updateMenu(
       input.menuName ?? current.menuName,
       parentId,
       input.orderNum ?? current.orderNum,
-      input.path ?? current.path,
-      input.component === undefined ? current.component : input.component,
+      routeFields.path,
+      routeFields.component,
       menuType,
       input.status ?? current.status,
       input.perms === undefined ? current.perms : input.perms,

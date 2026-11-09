@@ -45,6 +45,9 @@ const auth = useAuthStore();
 const rows = ref<MenuRow[]>([]);
 const menuTree = ref<MenuTreeNode[]>([]);
 const loading = ref(false);
+const listError = ref('');
+const treeLoading = ref(false);
+const treeError = ref('');
 const collapsed = ref<Set<number>>(new Set());
 
 const keyword = ref('');
@@ -100,10 +103,12 @@ const visibleRows = computed(() => {
 });
 
 let listRequestId = 0;
+let treeRequestId = 0;
 
-async function fetchMenus(): Promise<void> {
+async function fetchMenus(): Promise<boolean> {
   const requestId = ++listRequestId;
   loading.value = true;
+  listError.value = '';
   try {
     const query: MenuQuery = {
       keyword: keyword.value.trim() || undefined,
@@ -111,15 +116,17 @@ async function fetchMenus(): Promise<void> {
     };
     const result = await menuApi.list(query);
     if (requestId !== listRequestId) {
-      return;
+      return false;
     }
     rows.value = result;
+    return true;
   } catch (error) {
     if (requestId !== listRequestId) {
-      return;
+      return false;
     }
     rows.value = [];
-    toast.error(error instanceof Error ? error.message : '菜单列表加载失败');
+    listError.value = error instanceof Error ? error.message : '菜单列表加载失败';
+    return false;
   } finally {
     if (requestId === listRequestId) {
       loading.value = false;
@@ -127,11 +134,28 @@ async function fetchMenus(): Promise<void> {
   }
 }
 
-async function loadMenuTree(): Promise<void> {
+async function loadMenuTree(): Promise<boolean> {
+  const requestId = ++treeRequestId;
+  treeLoading.value = true;
+  treeError.value = '';
   try {
-    menuTree.value = await menuApi.tree();
+    const tree = await menuApi.tree();
+    if (requestId !== treeRequestId) {
+      return false;
+    }
+    menuTree.value = tree;
+    return true;
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : '菜单树加载失败');
+    if (requestId !== treeRequestId) {
+      return false;
+    }
+    menuTree.value = [];
+    treeError.value = error instanceof Error ? error.message : '菜单树加载失败';
+    return false;
+  } finally {
+    if (requestId === treeRequestId) {
+      treeLoading.value = false;
+    }
   }
 }
 
@@ -144,6 +168,14 @@ function resetFilters(): void {
   filterType.value = 'all';
   filterStatus.value = 'all';
   void fetchMenus();
+}
+
+/** 中文输入法确认候选词时不应触发查询。 */
+function handleKeywordEnter(event: KeyboardEvent): void {
+  if (event.isComposing || event.keyCode === 229) {
+    return;
+  }
+  applyFilters();
 }
 
 function toggleCollapse(menuId: number): void {
@@ -164,8 +196,10 @@ function rowIcon(row: MenuRow) {
 }
 
 async function refreshAll(): Promise<void> {
-  await Promise.all([fetchMenus(), loadMenuTree()]);
-  toast.success('菜单数据已刷新');
+  const [listOk, treeOk] = await Promise.all([fetchMenus(), loadMenuTree()]);
+  if (listOk && treeOk) {
+    toast.success('菜单数据已刷新');
+  }
 }
 
 /* ==================== 新增 / 编辑 ==================== */
@@ -290,7 +324,7 @@ onMounted(() => {
             v-model="keyword"
             placeholder="菜单名称 / 权限标识"
             class="h-9 w-56 rounded-md border border-input bg-background pr-2 pl-8 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            @keyup.enter="applyFilters"
+            @keydown.enter="handleKeywordEnter"
           />
         </div>
       </div>
@@ -357,6 +391,17 @@ onMounted(() => {
                 </div>
               </TableCell>
             </TableRow>
+            <TableRow v-else-if="listError">
+              <TableCell colspan="7">
+                <div class="flex flex-col items-center gap-3 py-10 text-center" role="alert">
+                  <p class="text-sm text-destructive">{{ listError }}</p>
+                  <Button variant="outline" size="sm" @click="fetchMenus">
+                    <RefreshCw class="size-3.5" />
+                    重试
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
             <template v-else-if="visibleRows.length">
               <TableRow v-for="row in visibleRows" :key="row.menuId">
                 <TableCell class="pl-4">
@@ -369,6 +414,8 @@ onMounted(() => {
                       type="button"
                       class="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent"
                       :title="collapsed.has(row.menuId) ? '展开下级' : '收起下级'"
+                      :aria-label="collapsed.has(row.menuId) ? '展开下级' : '收起下级'"
+                      :aria-expanded="!collapsed.has(row.menuId)"
                       @click="toggleCollapse(row.menuId)"
                     >
                       <ChevronRight v-if="collapsed.has(row.menuId)" class="size-3.5" />
@@ -434,6 +481,7 @@ onMounted(() => {
                       size="icon"
                       class="size-8"
                       title="新增下级菜单"
+                      aria-label="新增下级菜单"
                       @click="openCreate(row.menuId)"
                     >
                       <Plus class="size-3.5" />
@@ -444,6 +492,7 @@ onMounted(() => {
                       size="icon"
                       class="size-8"
                       title="编辑菜单"
+                      aria-label="编辑菜单"
                       @click="openEdit(row)"
                     >
                       <Pencil class="size-3.5" />
@@ -454,6 +503,7 @@ onMounted(() => {
                       size="icon"
                       class="size-8 text-muted-foreground hover:text-destructive"
                       title="删除菜单"
+                      aria-label="删除菜单"
                       @click="askDelete(row)"
                     >
                       <Trash2 class="size-3.5" />
@@ -473,7 +523,7 @@ onMounted(() => {
         </Table>
       </div>
       <div class="flex flex-wrap items-center justify-between gap-2 border-t bg-muted/20 px-4 py-2 text-[11px] text-muted-foreground">
-        <span>共 {{ visibleRows.length }} 个菜单节点；筛选状态下以平铺方式展示。</span>
+        <span>当前显示 {{ visibleRows.length }} 个菜单节点；筛选状态下以平铺方式展示。</span>
         <span>菜单根 ID 1000，动作 ID 以 100xx 起。</span>
       </div>
     </div>
@@ -482,6 +532,8 @@ onMounted(() => {
       v-model:open="formOpen"
       :menu="editTarget"
       :menus="menuTree"
+      :menus-loading="treeLoading"
+      :menus-error="treeError"
       :default-parent-id="defaultParentId"
       :saving="saving"
       :error="formError"
@@ -495,6 +547,7 @@ onMounted(() => {
       confirm-text="删除"
       destructive
       :loading="deleting"
+      :close-disabled="deleting"
       @confirm="handleDelete"
     />
   </div>

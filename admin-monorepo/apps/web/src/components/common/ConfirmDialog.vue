@@ -20,6 +20,8 @@ const props = withDefaults(
     cancelText?: string;
     destructive?: boolean;
     loading?: boolean;
+    /** 是否额外禁止关闭弹窗；loading 为 true 时也会自动禁止。 */
+    closeDisabled?: boolean;
   }>(),
   {
     description: '',
@@ -27,6 +29,7 @@ const props = withDefaults(
     cancelText: '取消',
     destructive: false,
     loading: false,
+    closeDisabled: false,
   },
 );
 
@@ -43,7 +46,10 @@ function handleConfirm(): void {
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="max-w-md">
+    <DialogContent
+      class="max-w-md"
+      :close-disabled="props.loading || props.closeDisabled"
+    >
       <DialogHeader>
         <DialogTitle>{{ props.title }}</DialogTitle>
         <DialogDescription>

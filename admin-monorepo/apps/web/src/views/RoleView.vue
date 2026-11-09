@@ -29,7 +29,7 @@ import {
   UserMinus,
   Users,
 } from 'lucide-vue-next';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 
 import { roleApi } from '@/api';
@@ -39,47 +39,83 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import StatusBadge from '@/components/common/StatusBadge.vue';
 import RoleFormDialog from '@/components/role/RoleFormDialog.vue';
 import RoleMembersDialog from '@/components/role/RoleMembersDialog.vue';
+import { findMenuPathByPerm } from '@/router/menu-routes';
 import { useAuthStore } from '@/stores/auth';
 
 const auth = useAuthStore();
 
+const permissionsPath = computed(() =>
+  findMenuPathByPerm(auth.profile?.menus ?? [], PERMS.PERM_LIST),
+);
+
 const roles = ref<RoleListItem[]>([]);
 const listLoading = ref(false);
+const listError = ref('');
 const selectedRoleId = ref<number | null>(null);
 const detail = ref<RoleDetail | null>(null);
 const detailLoading = ref(false);
+const detailError = ref('');
 
 const keyword = ref('');
 const filterStatus = ref<'all' | Status>('all');
 
+const canReadDetail = computed(() => auth.hasPerm(PERMS.ROLE_QUERY));
+/** 移除成员只调用角色成员接口，无需用户列表权限。 */
+const canAssignRoleUsers = computed(() => auth.hasPerm(PERMS.ROLE_AUTH_USER));
+/** 添加成员需要拉取用户候选列表。 */
+const canManageMembers = computed(
+  () => canAssignRoleUsers.value && auth.hasPerm(PERMS.USER_LIST),
+);
+
 let listRequestId = 0;
 let detailRequestId = 0;
 
-async function loadRoleList(preferredId?: number): Promise<void> {
+/** 清空详情并使仍在途的详情请求失效。 */
+function clearDetail(): void {
+  detailRequestId += 1;
+  detail.value = null;
+  detailLoading.value = false;
+  detailError.value = '';
+}
+
+async function loadRoleList(preferredId?: number): Promise<boolean> {
   const requestId = ++listRequestId;
   listLoading.value = true;
+  listError.value = '';
   try {
     const list = await roleApi.list({
       keyword: keyword.value.trim() || undefined,
       status: filterStatus.value === 'all' ? undefined : filterStatus.value,
     });
     if (requestId !== listRequestId) {
-      return;
+      return false;
     }
     roles.value = list;
-    const exists = roles.value.some((role) => role.roleId === selectedRoleId.value);
-    const nextId = preferredId ?? (exists ? selectedRoleId.value : (roles.value[0]?.roleId ?? null));
+    const preferredExists =
+      preferredId !== undefined && roles.value.some((role) => role.roleId === preferredId);
+    const selectedExists = roles.value.some((role) => role.roleId === selectedRoleId.value);
+    const nextId =
+      preferredExists
+        ? preferredId
+        : selectedExists
+          ? selectedRoleId.value
+          : (roles.value[0]?.roleId ?? null);
     selectedRoleId.value = nextId;
-    if (nextId !== null) {
+    if (nextId !== null && canReadDetail.value) {
       await loadRoleDetail(nextId);
     } else {
-      detail.value = null;
+      clearDetail();
     }
+    return true;
   } catch (error) {
     if (requestId !== listRequestId) {
-      return;
+      return false;
     }
-    toast.error(error instanceof Error ? error.message : '角色列表加载失败');
+    roles.value = [];
+    selectedRoleId.value = null;
+    clearDetail();
+    listError.value = error instanceof Error ? error.message : '角色列表加载失败';
+    return false;
   } finally {
     if (requestId === listRequestId) {
       listLoading.value = false;
@@ -90,6 +126,7 @@ async function loadRoleList(preferredId?: number): Promise<void> {
 async function loadRoleDetail(roleId: number): Promise<void> {
   const requestId = ++detailRequestId;
   detailLoading.value = true;
+  detailError.value = '';
   try {
     const result = await roleApi.detail(roleId);
     if (requestId !== detailRequestId) {
@@ -101,7 +138,7 @@ async function loadRoleDetail(roleId: number): Promise<void> {
       return;
     }
     detail.value = null;
-    toast.error(error instanceof Error ? error.message : '角色详情加载失败');
+    detailError.value = error instanceof Error ? error.message : '角色详情加载失败';
   } finally {
     if (requestId === detailRequestId) {
       detailLoading.value = false;
@@ -111,10 +148,17 @@ async function loadRoleDetail(roleId: number): Promise<void> {
 
 function selectRole(roleId: number): void {
   if (roleId === selectedRoleId.value) {
+    if (!detail.value && !detailLoading.value && canReadDetail.value) {
+      void loadRoleDetail(roleId);
+    }
     return;
   }
   selectedRoleId.value = roleId;
-  void loadRoleDetail(roleId);
+  if (canReadDetail.value) {
+    void loadRoleDetail(roleId);
+  } else {
+    clearDetail();
+  }
 }
 
 function applyFilters(): void {
@@ -127,9 +171,19 @@ function resetFilters(): void {
   void loadRoleList();
 }
 
+/** 中文输入法确认候选词时不应触发查询。 */
+function handleKeywordEnter(event: KeyboardEvent): void {
+  if (event.isComposing || event.keyCode === 229) {
+    return;
+  }
+  applyFilters();
+}
+
 async function refreshAll(): Promise<void> {
-  await loadRoleList();
-  toast.success('角色数据已刷新');
+  const ok = await loadRoleList();
+  if (ok) {
+    toast.success('角色数据已刷新');
+  }
 }
 
 /* ==================== 新增 / 编辑角色 ==================== */
@@ -203,7 +257,7 @@ const membersSaving = ref(false);
 const membersError = ref('');
 
 function openMembers(): void {
-  if (!detail.value) {
+  if (!detail.value || !canManageMembers.value) {
     return;
   }
   membersError.value = '';
@@ -325,7 +379,7 @@ onMounted(() => {
               aria-label="搜索角色名称或权限字符"
               placeholder="搜索角色名或权限字符"
               class="h-8 w-full rounded-md border border-input bg-background pr-2 pl-8 text-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              @keyup.enter="applyFilters"
+              @keydown.enter="handleKeywordEnter"
             />
           </div>
           <Select v-model="filterStatus" class="w-24">
@@ -345,6 +399,17 @@ onMounted(() => {
         <div class="min-h-0 flex-1 overflow-y-auto p-1.5">
           <div v-if="listLoading" class="space-y-1.5 p-1">
             <div v-for="index in 8" :key="index" class="h-16 animate-pulse rounded-lg bg-muted" />
+          </div>
+          <div
+            v-else-if="listError"
+            class="flex flex-col items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-8 text-center"
+            role="alert"
+          >
+            <p class="text-xs leading-relaxed text-destructive">{{ listError }}</p>
+            <Button variant="outline" size="sm" @click="loadRoleList()">
+              <RefreshCw class="size-3.5" />
+              重试
+            </Button>
           </div>
           <template v-else-if="roles.length">
             <button
@@ -408,12 +473,14 @@ onMounted(() => {
             </div>
             <div class="flex flex-wrap items-center gap-1.5">
               <Button
-                v-if="auth.hasPerm(PERMS.PERM_LIST)"
+                v-if="permissionsPath"
                 variant="outline"
                 size="sm"
                 as-child
               >
-                <RouterLink :to="{ name: 'permissions', query: { roleId: String(detail.roleId) } }">
+                <RouterLink
+                  :to="{ path: permissionsPath ?? '/dashboard', query: { roleId: String(detail.roleId) } }"
+                >
                   <KeyRound class="size-3.5" />
                   配置权限
                   <ArrowRight class="size-3.5" />
@@ -456,8 +523,14 @@ onMounted(() => {
               <span class="text-sm font-semibold">角色成员</span>
               <Badge variant="muted">{{ detail.users.length }}</Badge>
             </div>
+            <span
+              v-if="detail.roleId === 1"
+              class="ml-auto text-xs text-amber-600"
+            >
+              内置角色成员固定为 admin
+            </span>
             <Button
-              v-if="auth.hasPerm(PERMS.ROLE_AUTH_USER)"
+              v-else-if="canManageMembers"
               variant="outline"
               size="sm"
               class="ml-auto"
@@ -529,7 +602,7 @@ onMounted(() => {
                     </TableCell>
                     <TableCell class="pr-4 text-right">
                       <Button
-                        v-if="auth.hasPerm(PERMS.ROLE_AUTH_USER)"
+                        v-if="canAssignRoleUsers"
                         variant="ghost"
                         size="sm"
                         class="text-muted-foreground hover:text-destructive"
@@ -545,7 +618,7 @@ onMounted(() => {
                   <TableCell colspan="6">
                     <EmptyState compact text="该角色暂无成员">
                       <Button
-                        v-if="auth.hasPerm(PERMS.ROLE_AUTH_USER)"
+                        v-if="canManageMembers && detail.roleId !== 1"
                         variant="outline"
                         size="sm"
                         @click="openMembers"
@@ -558,6 +631,30 @@ onMounted(() => {
               </TableBody>
             </Table>
           </div>
+        </div>
+
+        <div
+          v-else-if="selectedRoleId !== null && !canReadDetail"
+          class="flex min-h-80 items-center justify-center rounded-xl border bg-card shadow-sm"
+        >
+          <EmptyState text="缺少角色详情查询权限，无法查看所选角色" />
+        </div>
+
+        <div
+          v-else-if="detailError"
+          class="flex min-h-80 flex-col items-center justify-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-6 text-center"
+          role="alert"
+        >
+          <p class="text-sm text-destructive">{{ detailError }}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            :disabled="detailLoading || selectedRoleId === null"
+            @click="selectedRoleId !== null && loadRoleDetail(selectedRoleId)"
+          >
+            <RefreshCw class="size-3.5" />
+            重试
+          </Button>
         </div>
 
         <div
@@ -592,6 +689,7 @@ onMounted(() => {
       confirm-text="删除"
       destructive
       :loading="deleting"
+      :close-disabled="deleting"
       @confirm="handleDeleteRole"
     />
 
@@ -602,6 +700,7 @@ onMounted(() => {
       confirm-text="移除"
       destructive
       :loading="removingMember"
+      :close-disabled="removingMember"
       @confirm="handleRemoveMember"
     />
   </div>

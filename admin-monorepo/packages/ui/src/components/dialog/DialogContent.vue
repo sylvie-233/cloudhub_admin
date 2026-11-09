@@ -6,10 +6,22 @@ import { X } from 'lucide-vue-next';
 
 import { cn } from '../../lib/utils';
 
-const props = defineProps<DialogContentProps & { class?: HTMLAttributes['class'] }>();
+const props = defineProps<
+  DialogContentProps & {
+    class?: HTMLAttributes['class'];
+    /** 为 true 时禁止通过遮罩、Esc 或关闭按钮退出（提交中常用）。 */
+    closeDisabled?: boolean;
+  }
+>();
 const emits = defineEmits<DialogContentEmits>();
 
 const forwarded = useForwardPropsEmits(props, emits);
+
+function blockDismiss(event: Event): void {
+  if (props.closeDisabled) {
+    event.preventDefault();
+  }
+}
 </script>
 
 <template>
@@ -25,9 +37,14 @@ const forwarded = useForwardPropsEmits(props, emits);
           props.class,
         )
       "
+      @escape-key-down="blockDismiss"
+      @pointer-down-outside="blockDismiss"
+      @interact-outside="blockDismiss"
     >
       <slot />
       <DialogClose
+        v-if="!props.closeDisabled"
+        aria-label="关闭"
         class="absolute top-4 right-4 rounded-md p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-accent hover:opacity-100"
       >
         <X class="size-4" />

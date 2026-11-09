@@ -62,29 +62,57 @@ const auth = useAuthStore();
 /* ==================== 基础数据 ==================== */
 const orgTree = ref<OrgTreeNode[]>([]);
 const roles = ref<RoleListItem[]>([]);
+const rolesLoading = ref(false);
+const rolesLoadError = ref('');
 
 const orgRows = computed(() => flattenOrgTree(orgTree.value));
 
-const roleOptions = computed<MultiSelectOption[]>(() =>
-  roles.value.map((role) => ({
-    value: role.roleId,
-    label: role.roleName,
-    group: role.status === '1' ? '停用角色' : '可用角色',
-    hint: role.roleKey,
-  })),
+const canReadOrgs = computed(() => auth.hasPerm(PERMS.ORG_LIST));
+const canReadRoles = computed(() => auth.hasPerm([PERMS.ROLE_LIST, PERMS.PERM_QUERY]));
+const canReadPosts = computed(() => auth.hasPerm(PERMS.POST_QUERY));
+/** 用户表单必须能读取组织与岗位候选，否则无法满足「至少一个岗位」。 */
+const canCreateUser = computed(
+  () => auth.hasPerm(PERMS.USER_ADD) && canReadOrgs.value && canReadPosts.value,
+);
+const canEditUser = computed(
+  () => auth.hasPerm(PERMS.USER_EDIT) && canReadOrgs.value && canReadPosts.value,
+);
+const canAssignRoles = computed(
+  () =>
+    auth.hasPerm(PERMS.USER_AUTH_ROLE) &&
+    canReadRoles.value &&
+    !rolesLoading.value &&
+    !rolesLoadError.value,
+);
+const canOpenRolesDialog = computed(
+  () => auth.hasPerm(PERMS.USER_AUTH_ROLE) && canReadRoles.value,
 );
 
-let orgTreePromise: Promise<void> | null = null;
+let orgTreePromise: Promise<boolean> | null = null;
 
-function loadOrgTree(): Promise<void> {
+function loadOrgTree(): Promise<boolean> {
+  if (!canReadOrgs.value) {
+    return Promise.resolve(true);
+  }
   if (orgTreePromise) {
     return orgTreePromise;
   }
   orgTreePromise = (async () => {
     try {
       orgTree.value = await orgApi.list();
+      const rows = flattenOrgTree(orgTree.value);
+      if (
+        filterOrgId.value !== '0' &&
+        !rows.some((row) => String(row.org.orgId) === filterOrgId.value)
+      ) {
+        filterOrgId.value = '0';
+        page.value = 1;
+        void loadUsers();
+      }
+      return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '组织树加载失败');
+      return false;
     } finally {
       orgTreePromise = null;
     }
@@ -92,11 +120,22 @@ function loadOrgTree(): Promise<void> {
   return orgTreePromise;
 }
 
-async function loadRoles(): Promise<void> {
+async function loadRoles(): Promise<boolean> {
+  if (!canReadRoles.value) {
+    return true;
+  }
+  rolesLoading.value = true;
+  rolesLoadError.value = '';
   try {
     roles.value = await roleApi.list();
+    return true;
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : '角色列表加载失败');
+    const message = error instanceof Error ? error.message : '角色列表加载失败';
+    rolesLoadError.value = message;
+    toast.error(message);
+    return false;
+  } finally {
+    rolesLoading.value = false;
   }
 }
 
@@ -106,17 +145,23 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = 10;
 const loading = ref(false);
+const listError = ref('');
 
 const keyword = ref('');
 const filterOrgId = ref('0');
 const filterStatus = ref<'all' | Status>('all');
 const includeSub = ref(true);
 
+const hasFilters = computed(
+  () => Boolean(keyword.value.trim()) || filterOrgId.value !== '0' || filterStatus.value !== 'all',
+);
+
 let userListRequestId = 0;
 
-async function loadUsers(): Promise<void> {
+async function loadUsers(): Promise<boolean> {
   const requestId = ++userListRequestId;
   loading.value = true;
+  listError.value = '';
   try {
     const result = await userApi.list({
       keyword: keyword.value.trim() || undefined,
@@ -127,23 +172,25 @@ async function loadUsers(): Promise<void> {
       pageSize,
     });
     if (requestId !== userListRequestId) {
-      return;
+      return false;
     }
     const maxPage = Math.max(1, Math.ceil(result.total / pageSize));
     if (page.value > maxPage) {
       page.value = maxPage;
-      await loadUsers();
-      return;
+      return loadUsers();
     }
     users.value = result.list;
     total.value = result.total;
+    return true;
   } catch (error) {
     if (requestId !== userListRequestId) {
-      return;
+      return false;
     }
     users.value = [];
     total.value = 0;
-    toast.error(error instanceof Error ? error.message : '用户列表加载失败');
+    listError.value = error instanceof Error ? error.message : '用户列表加载失败';
+    toast.error(listError.value);
+    return false;
   } finally {
     if (requestId === userListRequestId) {
       loading.value = false;
@@ -154,6 +201,14 @@ async function loadUsers(): Promise<void> {
 function applyFilters(): void {
   page.value = 1;
   void loadUsers();
+}
+
+/** 中文输入法确认候选词时不应触发查询。 */
+function handleKeywordEnter(event: KeyboardEvent): void {
+  if (event.isComposing || event.keyCode === 229) {
+    return;
+  }
+  applyFilters();
 }
 
 function resetFilters(): void {
@@ -172,18 +227,26 @@ function changePage(nextPage: number): void {
 
 async function refreshAll(): Promise<void> {
   postOptionsLoaded.value = false;
-  await Promise.all([loadOrgTree(), loadRoles(), loadUsers()]);
-  toast.success('用户数据已刷新');
+  postOptionsError.value = '';
+  const results = await Promise.all([loadOrgTree(), loadRoles(), loadUsers()]);
+  if (results.every(Boolean)) {
+    toast.success('用户数据已刷新');
+  }
 }
 
 /* ==================== 表单数据加载 ==================== */
 const postOptions = ref<MultiSelectOption[]>([]);
 const postOptionsLoading = ref(false);
 const postOptionsLoaded = ref(false);
+const postOptionsError = ref('');
 let postOptionsPromise: Promise<void> | null = null;
 
 /** 加载全部组织的岗位候选；同一页面生命周期内复用，刷新时失效重载。 */
 function loadPostOptions(): Promise<void> {
+  if (!canReadOrgs.value || !canReadPosts.value) {
+    postOptionsError.value = '当前账号无权读取组织与岗位，无法维护用户岗位';
+    return Promise.resolve();
+  }
   if (postOptionsLoaded.value) {
     return Promise.resolve();
   }
@@ -193,10 +256,15 @@ function loadPostOptions(): Promise<void> {
   postOptionsPromise = (async () => {
     postOptionsLoading.value = true;
     postOptions.value = [];
+    postOptionsError.value = '';
     try {
-      // 组织树可能仍在加载：先等待，避免用空树直接判定为“没有岗位”
+      // 组织树可能仍在加载：先等待；加载失败时保留错误，不能缓存为空候选
       if (!orgTree.value.length) {
-        await loadOrgTree();
+        const orgLoaded = await loadOrgTree();
+        if (!orgLoaded || !orgTree.value.length) {
+          postOptionsError.value = '组织树加载失败，无法获取岗位候选，请刷新后重试';
+          return;
+        }
       }
       const orgs = flattenOrgTree(orgTree.value);
       const groups = await Promise.all(
@@ -213,7 +281,9 @@ function loadPostOptions(): Promise<void> {
       postOptions.value = groups.flat();
       postOptionsLoaded.value = true;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '岗位候选加载失败');
+      postOptionsError.value =
+        error instanceof Error ? error.message : '岗位候选加载失败';
+      toast.error(postOptionsError.value);
     } finally {
       postOptionsLoading.value = false;
       postOptionsPromise = null;
@@ -227,6 +297,21 @@ const userFormOpen = ref(false);
 const userEditTarget = ref<UserListItem | null>(null);
 const userSaving = ref(false);
 const userError = ref('');
+
+/**
+ * 超级管理员角色不进入普通角色候选：防止授予他人或误取消内置 admin。
+ * 编辑内置 admin 时，表单仍会原样提交其既有 roleId=1。
+ */
+const roleOptions = computed<MultiSelectOption[]>(() =>
+  roles.value
+    .filter((role) => role.roleId !== 1)
+    .map((role) => ({
+      value: role.roleId,
+      label: role.roleName,
+      group: role.status === '1' ? '停用角色' : '可用角色',
+      hint: role.roleKey,
+    })),
+);
 
 function openCreateUser(): void {
   userEditTarget.value = null;
@@ -252,7 +337,7 @@ async function handleUserSubmit(payload: {
   sex: '0' | '1' | '2';
   status: Status;
   postIds: number[];
-  roleIds: number[];
+  roleIds?: number[];
 }): Promise<void> {
   userSaving.value = true;
   userError.value = '';
@@ -265,7 +350,7 @@ async function handleUserSubmit(payload: {
         sex: payload.sex,
         status: payload.status,
         postIds: payload.postIds,
-        roleIds: payload.roleIds,
+        ...(payload.roleIds !== undefined ? { roleIds: payload.roleIds } : {}),
       });
       toast.success('用户信息已更新');
     } else {
@@ -278,7 +363,7 @@ async function handleUserSubmit(payload: {
         sex: payload.sex,
         status: payload.status,
         postIds: payload.postIds,
-        roleIds: payload.roleIds,
+        ...(payload.roleIds !== undefined ? { roleIds: payload.roleIds } : {}),
       });
       toast.success('用户创建成功');
     }
@@ -315,7 +400,7 @@ async function handleAssignRoles(roleIds: number[]): Promise<void> {
     await userApi.assignRoles(rolesTarget.value.userId, { roleIds });
     toast.success('用户角色已更新');
     rolesDialogOpen.value = false;
-    await loadUsers();
+    await Promise.all([loadUsers(), loadRoles()]);
   } catch (error) {
     rolesError.value = error instanceof Error ? error.message : '角色分配失败';
   } finally {
@@ -402,7 +487,7 @@ onMounted(() => {
           <RefreshCw class="size-4" :class="loading && 'animate-spin'" />
           刷新
         </Button>
-        <Button v-if="auth.hasPerm(PERMS.USER_ADD)" size="sm" @click="openCreateUser">
+        <Button v-if="canCreateUser" size="sm" @click="openCreateUser">
           <Plus class="size-4" />
           新增用户
         </Button>
@@ -419,12 +504,12 @@ onMounted(() => {
             v-model="keyword"
             placeholder="账号 / 昵称 / 手机号"
             class="h-9 w-52 rounded-md border border-input bg-background pr-2 pl-8 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            @keyup.enter="applyFilters"
+            @keydown.enter="handleKeywordEnter"
           />
         </div>
       </div>
 
-      <div class="w-48 space-y-1">
+      <div v-if="canReadOrgs" class="w-48 space-y-1">
         <label for="user-filter-org" class="text-[11px] text-muted-foreground">组织</label>
         <Select v-model="filterOrgId">
           <SelectTrigger id="user-filter-org" class="h-9 w-full">
@@ -457,7 +542,7 @@ onMounted(() => {
         </Select>
       </div>
 
-      <div class="flex h-9 items-center gap-2 pb-0.5">
+      <div v-if="canReadOrgs" class="flex h-9 items-center gap-2 pb-0.5">
         <Switch
           v-model="includeSub"
           aria-label="包含下级组织"
@@ -495,6 +580,14 @@ onMounted(() => {
                 <div class="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
                   <Loader2 class="size-4 animate-spin" />
                   正在加载用户…
+                </div>
+              </TableCell>
+            </TableRow>
+            <TableRow v-else-if="listError">
+              <TableCell colspan="6">
+                <div class="flex flex-col items-center gap-2 py-10 text-center">
+                  <p class="text-sm text-destructive">{{ listError }}</p>
+                  <Button variant="outline" size="sm" @click="loadUsers">重试</Button>
                 </div>
               </TableCell>
             </TableRow>
@@ -562,7 +655,7 @@ onMounted(() => {
                 <TableCell class="pr-4 text-right">
                   <div class="flex items-center justify-end gap-0.5">
                     <Button
-                      v-if="auth.hasPerm(PERMS.USER_EDIT)"
+                      v-if="canEditUser"
                       variant="ghost"
                       size="icon"
                       class="size-8"
@@ -571,7 +664,16 @@ onMounted(() => {
                     >
                       <Pencil class="size-3.5" />
                     </Button>
-                    <DropdownMenu>
+                    <DropdownMenu
+                      v-if="
+                        canOpenRolesDialog ||
+                        auth.hasPerm([
+                          PERMS.USER_VIEW,
+                          PERMS.USER_RESET_PWD,
+                          PERMS.USER_REMOVE,
+                        ])
+                      "
+                    >
                       <DropdownMenuTrigger as-child>
                         <Button
                           variant="ghost"
@@ -591,7 +693,7 @@ onMounted(() => {
                           查看权限
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          v-if="auth.hasPerm(PERMS.USER_AUTH_ROLE)"
+                          v-if="canOpenRolesDialog"
                           @select="openUserRoles(user)"
                         >
                           <ShieldCheck class="size-4" />
@@ -623,9 +725,9 @@ onMounted(() => {
             </template>
             <TableRow v-else>
               <TableCell colspan="6">
-                <EmptyState text="没有匹配的用户记录">
+                <EmptyState :text="hasFilters ? '没有匹配的用户记录' : '暂无用户记录'">
                   <Button
-                    v-if="auth.hasPerm(PERMS.USER_ADD)"
+                    v-if="canCreateUser && !hasFilters"
                     size="sm"
                     @click="openCreateUser"
                   >
@@ -655,7 +757,9 @@ onMounted(() => {
       :user="userEditTarget"
       :post-options="postOptions"
       :post-options-loading="postOptionsLoading"
+      :post-options-error="postOptionsError"
       :role-options="roleOptions"
+      :can-assign-roles="canAssignRoles"
       :saving="userSaving"
       :error="userError"
       @submit="handleUserSubmit"
@@ -665,9 +769,12 @@ onMounted(() => {
       v-model:open="rolesDialogOpen"
       :user="rolesTarget"
       :roles="roles"
+      :roles-loading="rolesLoading"
+      :roles-error="rolesLoadError"
       :saving="rolesSaving"
       :error="rolesError"
       @submit="handleAssignRoles"
+      @retry="loadRoles"
     />
 
     <ResetPasswordDialog
@@ -685,6 +792,7 @@ onMounted(() => {
       confirm-text="删除"
       destructive
       :loading="deleting"
+      :close-disabled="deleting"
       @confirm="handleDelete"
     />
 

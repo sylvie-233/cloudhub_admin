@@ -39,38 +39,71 @@ const localError = ref('');
 
 const displayError = computed(() => props.error || localError.value);
 
-const userOptions = computed<MultiSelectOption[]>(() =>
-  users.value.map((user) => {
+const userOptions = computed<MultiSelectOption[]>(() => {
+  const optionMap = new Map<number, MultiSelectOption>();
+
+  // 当前角色成员可能因数据范围限制不在用户列表中，仍需作为候选项展示，
+  // 避免其在界面上消失后被「整体替换」误移除。
+  for (const user of props.role?.users ?? []) {
     const primaryPost = user.posts[0];
-    return {
+    optionMap.set(user.userId, {
       value: user.userId,
       label: `${user.nickName}（${user.userName}）`,
       group: primaryPost?.orgPath ?? '未分配岗位',
       hint: user.posts.length > 1 ? `${user.posts.length} 个岗位` : primaryPost?.postName,
-    };
-  }),
-);
+    });
+  }
+
+  for (const user of users.value) {
+    if (optionMap.has(user.userId)) {
+      continue;
+    }
+    const primaryPost = user.posts[0];
+    optionMap.set(user.userId, {
+      value: user.userId,
+      label: `${user.nickName}（${user.userName}）`,
+      group: primaryPost?.orgPath ?? '未分配岗位',
+      hint: user.posts.length > 1 ? `${user.posts.length} 个岗位` : primaryPost?.postName,
+    });
+  }
+
+  return [...optionMap.values()];
+});
+
+let loadRequestId = 0;
 
 async function loadUsers(): Promise<void> {
+  const requestId = ++loadRequestId;
   loading.value = true;
   loadError.value = '';
+  users.value = [];
   try {
     const all: UserListItem[] = [];
-    let page = 1;
+    let expectedTotal = 0;
     // pageSize 上限为 100，逐页拉取以保证「整体替换」拥有完整候选用户。
-    for (;;) {
+    for (let page = 1; ; page += 1) {
       const result = await userApi.list({ page, pageSize: 100 });
+      if (requestId !== loadRequestId) {
+        return;
+      }
+      if (page === 1) {
+        expectedTotal = result.total;
+      }
       all.push(...result.list);
-      if (all.length >= result.total || result.list.length === 0 || page >= 50) {
+      if (result.list.length === 0 || all.length >= expectedTotal) {
         break;
       }
-      page += 1;
     }
     users.value = all;
   } catch (error) {
+    if (requestId !== loadRequestId) {
+      return;
+    }
     loadError.value = error instanceof Error ? error.message : '用户列表加载失败';
   } finally {
-    loading.value = false;
+    if (requestId === loadRequestId) {
+      loading.value = false;
+    }
   }
 }
 
@@ -90,6 +123,10 @@ watch(
       localError.value = '';
       selected.value = (props.role?.users ?? []).map((user) => user.userId);
       void loadUsers();
+    } else {
+      // 关闭对话框时使仍在途的分页请求失效。
+      loadRequestId += 1;
+      loading.value = false;
     }
   },
   { immediate: true },
@@ -98,7 +135,7 @@ watch(
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="max-h-[90vh] max-w-xl overflow-y-auto">
+    <DialogContent class="max-h-[90vh] max-w-xl overflow-y-auto" :close-disabled="props.saving">
       <DialogHeader>
         <DialogTitle>管理角色成员</DialogTitle>
         <DialogDescription>
@@ -128,7 +165,7 @@ watch(
           :max-chips="6"
         />
         <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span>已选择 {{ selected.length }} / {{ users.length }} 位用户</span>
+          <span>已选择 {{ selected.length }} 人 · 候选 {{ userOptions.length }} 人</span>
           <span v-if="props.role?.roleId === 1" class="text-amber-600">
             内置 admin 用户必须保留
           </span>

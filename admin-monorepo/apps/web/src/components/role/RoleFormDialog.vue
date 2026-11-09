@@ -92,6 +92,7 @@ function init(): void {
 function handleSubmit(): void {
   const roleName = form.value.roleName.trim();
   const roleKey = form.value.roleKey.trim();
+  const roleSort = Number(form.value.roleSort);
   if (!roleName) {
     localError.value = '请输入角色名称';
     return;
@@ -100,12 +101,16 @@ function handleSubmit(): void {
     localError.value = '权限字符需以字母开头，只能包含字母、数字、冒号、下划线和短横线';
     return;
   }
+  if (!form.value.roleSort.trim() || !Number.isInteger(roleSort) || roleSort < 0) {
+    localError.value = '显示顺序必须为不小于 0 的整数';
+    return;
+  }
   localError.value = '';
   emit('submit', {
     roleId: props.role?.roleId,
     roleName,
     roleKey,
-    roleSort: Number(form.value.roleSort) || 0,
+    roleSort,
     dataScope: form.value.dataScope,
     status: form.value.status,
     remark: form.value.remark.trim() || null,
@@ -125,7 +130,10 @@ watch(
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="max-h-[92vh] max-w-xl overflow-y-auto">
+    <DialogContent
+      class="max-h-[92vh] max-w-xl overflow-y-auto"
+      :close-disabled="props.saving"
+    >
       <DialogHeader>
         <DialogTitle>{{ isEdit ? '编辑角色' : '新增角色' }}</DialogTitle>
         <DialogDescription>

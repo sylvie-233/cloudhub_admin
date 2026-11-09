@@ -25,8 +25,8 @@ import {
   ShieldCheck,
   Star,
 } from 'lucide-vue-next';
-import { computed, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { onBeforeRouteLeave, useRoute } from 'vue-router';
 
 import { menuApi, orgApi, permApi, postApi, roleApi } from '@/api';
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
@@ -59,6 +59,18 @@ const orgTree = ref<OrgTreeNode[]>([]);
 const roles = ref<RoleListItem[]>([]);
 const postsByOrg = ref<Record<number, PostTreeNode[]>>({});
 const baseLoading = ref(false);
+const baseError = ref('');
+const menuError = ref('');
+const postNotice = ref('');
+
+const canLoadMenus = computed(
+  () => auth.hasPerm(PERMS.MENU_LIST) || auth.hasPerm(PERMS.PERM_QUERY),
+);
+const canLoadOrgs = computed(() => auth.hasPerm(PERMS.ORG_LIST));
+const canLoadRoles = computed(
+  () => auth.hasPerm(PERMS.ROLE_LIST) || auth.hasPerm(PERMS.PERM_QUERY),
+);
+const canLoadPosts = computed(() => auth.hasPerm(PERMS.POST_QUERY));
 
 const activeTab = ref<Tab>('postorg');
 const subjectType = ref<SubjectType>('org');
@@ -199,6 +211,34 @@ const currentLocked = computed(() =>
 );
 const canSaveMenus = computed(() => auth.hasPerm(PERMS.PERM_SAVE));
 const canSaveScope = computed(() => auth.hasPerm(PERMS.PERM_DATA_SCOPE));
+const canQueryPerm = computed(() => auth.hasPerm(PERMS.PERM_QUERY));
+const savingMenus = ref(false);
+const savingScope = ref(false);
+const isBusy = computed(() => savingMenus.value || savingScope.value);
+const canEditCurrent = computed(() =>
+  isDataTab.value ? canSaveScope.value : canSaveMenus.value,
+);
+
+const emptySelectionText = computed(() => {
+  if (isRole.value) {
+    return canLoadRoles.value
+      ? '暂无可配置的角色，请先在角色管理中创建角色'
+      : '当前账号缺少角色查询权限，无法选择角色';
+  }
+  return canLoadOrgs.value
+    ? '暂无可配置的组织，请先在组织管理中创建组织'
+    : '当前账号缺少组织查询权限，无法选择组织或岗位';
+});
+
+const menuEmptyText = computed(() => {
+  if (!canLoadMenus.value) {
+    return '当前账号缺少菜单查询权限，无法加载可授权菜单';
+  }
+  if (menuError.value) {
+    return `菜单树加载失败：${menuError.value}`;
+  }
+  return '菜单树为空，请先在菜单管理中维护';
+});
 
 const subjectTitle = computed(() => {
   if (isRole.value) {
@@ -240,38 +280,48 @@ const subjectNote = computed(() => {
 });
 
 /* ==================== 数据加载 ==================== */
-async function loadBaseData(): Promise<void> {
+async function loadBaseData(): Promise<boolean> {
   baseLoading.value = true;
+  baseError.value = '';
+  menuError.value = '';
+  postNotice.value = '';
   const errors: string[] = [];
 
+  // 按当前账号实际拥有的查询权限发起请求，避免进入页面即产生 403。
   const [menuResult, orgResult, roleResult] = await Promise.allSettled([
-    menuApi.tree(),
-    orgApi.list(),
-    roleApi.list(),
+    canLoadMenus.value ? menuApi.tree() : Promise.resolve<MenuTreeNode[]>([]),
+    canLoadOrgs.value ? orgApi.list() : Promise.resolve<OrgTreeNode[]>([]),
+    canLoadRoles.value ? roleApi.list() : Promise.resolve<RoleListItem[]>([]),
   ]);
 
-  if (menuResult.status === 'fulfilled') {
+  const menuOk = menuResult.status === 'fulfilled';
+  const orgOk = orgResult.status === 'fulfilled';
+  const roleOk = roleResult.status === 'fulfilled';
+
+  if (menuOk) {
     menuTree.value = menuResult.value;
   } else {
-    errors.push(menuResult.reason instanceof Error ? menuResult.reason.message : '菜单树加载失败');
+    const message = menuResult.reason instanceof Error ? menuResult.reason.message : '菜单树加载失败';
+    menuError.value = message;
+    errors.push(message);
   }
 
-  if (orgResult.status === 'fulfilled') {
+  if (orgOk) {
     orgTree.value = orgResult.value;
   } else {
     errors.push(orgResult.reason instanceof Error ? orgResult.reason.message : '组织树加载失败');
   }
 
-  if (roleResult.status === 'fulfilled') {
+  if (roleOk) {
     roles.value = roleResult.value;
   } else {
     errors.push(roleResult.reason instanceof Error ? roleResult.reason.message : '角色列表加载失败');
   }
 
   const flatOrgs = flattenOrgTree(orgTree.value);
-  const postResults = await Promise.allSettled(
-    flatOrgs.map((row) => postApi.list(row.org.orgId)),
-  );
+  const postResults = canLoadPosts.value
+    ? await Promise.allSettled(flatOrgs.map((row) => postApi.list(row.org.orgId)))
+    : [];
   const postMap: Record<number, PostTreeNode[]> = {};
   let failedPostCount = 0;
   postResults.forEach((result, index) => {
@@ -287,48 +337,73 @@ async function loadBaseData(): Promise<void> {
   });
   postsByOrg.value = postMap;
 
-  const orgExists =
-    selectedOrgId.value !== null && flatOrgs.some((row) => row.org.orgId === selectedOrgId.value);
-  if (!orgExists) {
-    selectedOrgId.value = flatOrgs[0]?.org.orgId ?? null;
-    if (subjectType.value === 'org' && !selectedOrgId.value) {
+  // 仅在对应列表成功刷新时校正选择，避免网络异常时清空当前授权对象。
+  if (orgOk) {
+    const orgExists =
+      selectedOrgId.value !== null && flatOrgs.some((row) => row.org.orgId === selectedOrgId.value);
+    if (!orgExists) {
+      selectedOrgId.value = flatOrgs[0]?.org.orgId ?? null;
+      if (subjectType.value === 'org' && !selectedOrgId.value) {
+        selectedPostId.value = null;
+      }
+    }
+  }
+
+  if (roleOk) {
+    const roleExists =
+      selectedRoleId.value !== null &&
+      roles.value.some((role) => role.roleId === selectedRoleId.value);
+    if (!roleExists) {
+      selectedRoleId.value = roles.value[0]?.roleId ?? null;
+    }
+  }
+
+  // 岗位分页只要有一页失败就无法确认选择是否仍存在，此时保留原选择与详情。
+  if (canLoadPosts.value && failedPostCount === 0) {
+    const postExists =
+      selectedPostId.value !== null &&
+      allPostRows.value.some((post) => post.postId === selectedPostId.value);
+    if (!postExists) {
       selectedPostId.value = null;
+      if (subjectType.value === 'post') {
+        subjectType.value = 'org';
+      }
     }
   }
 
-  const roleExists =
-    selectedRoleId.value !== null && roles.value.some((role) => role.roleId === selectedRoleId.value);
-  if (!roleExists) {
-    selectedRoleId.value = roles.value[0]?.roleId ?? null;
-  }
-
-  const postExists =
-    selectedPostId.value !== null &&
-    allPostRows.value.some((post) => post.postId === selectedPostId.value);
-  if (!postExists) {
-    selectedPostId.value = null;
-    if (subjectType.value === 'post') {
-      subjectType.value = 'org';
-    }
+  if (failedPostCount > 0) {
+    postNotice.value = `${failedPostCount} 个组织的岗位数据加载失败，岗位树可能不完整`;
+  } else if (!canLoadPosts.value) {
+    postNotice.value = '当前账号缺少岗位查询权限，岗位节点未加载';
   }
 
   if (errors.length) {
-    toast.error(errors[0] ?? '权限基础数据加载失败');
-  }
-  if (failedPostCount > 0) {
-    toast.error(`${failedPostCount} 个组织的岗位数据加载失败`);
+    baseError.value = errors[0] ?? '权限基础数据加载失败';
   }
 
   baseLoading.value = false;
+  return errors.length === 0 && failedPostCount === 0;
 }
 
-async function loadPermissionDetail(): Promise<void> {
-  if (!hasSelection.value) {
+async function loadPermissionDetail(): Promise<boolean> {
+  if (!canQueryPerm.value) {
+    detailRequestId += 1;
     roleDetail.value = null;
     subjectDetail.value = null;
     menuIds.value = [];
+    detailLoading.value = false;
+    detailError.value = '当前账号缺少权限查询权限';
+    return false;
+  }
+
+  if (!hasSelection.value) {
+    detailRequestId += 1;
+    roleDetail.value = null;
+    subjectDetail.value = null;
+    menuIds.value = [];
+    detailLoading.value = false;
     detailError.value = '';
-    return;
+    return false;
   }
 
   const requestId = ++detailRequestId;
@@ -342,7 +417,7 @@ async function loadPermissionDetail(): Promise<void> {
     if (isRole.value && selectedRoleId.value !== null) {
       const result = await permApi.roleDetail(selectedRoleId.value);
       if (requestId !== detailRequestId) {
-        return;
+        return false;
       }
       roleDetail.value = result;
       menuIds.value = [...result.menuIds];
@@ -351,23 +426,25 @@ async function loadPermissionDetail(): Promise<void> {
     } else if (subjectType.value === 'post' && selectedPostId.value !== null) {
       const result = await permApi.postDetail(selectedPostId.value);
       if (requestId !== detailRequestId) {
-        return;
+        return false;
       }
       subjectDetail.value = result;
       menuIds.value = [...result.menuIds];
     } else if (subjectType.value === 'org' && selectedOrgId.value !== null) {
       const result = await permApi.orgDetail(selectedOrgId.value);
       if (requestId !== detailRequestId) {
-        return;
+        return false;
       }
       subjectDetail.value = result;
       menuIds.value = [...result.menuIds];
     }
+    return true;
   } catch (error) {
     if (requestId !== detailRequestId) {
-      return;
+      return false;
     }
     detailError.value = error instanceof Error ? error.message : '权限详情加载失败';
+    return false;
   } finally {
     if (requestId === detailRequestId) {
       detailLoading.value = false;
@@ -377,6 +454,9 @@ async function loadPermissionDetail(): Promise<void> {
 
 /* ==================== 选择授权对象 ==================== */
 function selectOrg(orgId: number): void {
+  if (isBusy.value) {
+    return;
+  }
   if (
     activeTab.value === 'postorg' &&
     subjectType.value === 'org' &&
@@ -398,6 +478,9 @@ function selectOrg(orgId: number): void {
 }
 
 function selectPost(post: PostTreeNode): void {
+  if (isBusy.value) {
+    return;
+  }
   if (
     activeTab.value === 'postorg' &&
     subjectType.value === 'post' &&
@@ -419,6 +502,9 @@ function selectPost(post: PostTreeNode): void {
 }
 
 function selectRole(roleId: number): void {
+  if (isBusy.value) {
+    return;
+  }
   if (isRole.value && selectedRoleId.value === roleId) {
     roleRightTab.value = 'menu';
     if (!roleDetail.value) {
@@ -435,7 +521,13 @@ function selectRole(roleId: number): void {
 }
 
 function switchTab(tab: Tab): void {
-  if (activeTab.value === tab) {
+  if (isBusy.value || activeTab.value === tab) {
+    return;
+  }
+  if (tab === 'role' && !canLoadRoles.value) {
+    return;
+  }
+  if (tab === 'postorg' && !canLoadOrgs.value) {
     return;
   }
   runAfterDiscard(() => {
@@ -450,7 +542,7 @@ function switchTab(tab: Tab): void {
       return;
     }
 
-    if (subjectType.value === 'post' && selectedPostId.value !== null) {
+    if (subjectType.value === 'post' && selectedPostId.value !== null && canLoadPosts.value) {
       void loadPermissionDetail();
       return;
     }
@@ -463,19 +555,22 @@ function switchTab(tab: Tab): void {
 }
 
 function switchRoleRightTab(tab: RoleRightTab): void {
-  if (roleRightTab.value === tab) {
+  if (isBusy.value || roleRightTab.value === tab) {
     return;
   }
   roleRightTab.value = tab;
 }
 
 function resetMenus(): void {
+  if (isBusy.value) {
+    return;
+  }
   const saved = isRole.value ? roleDetail.value?.menuIds : subjectDetail.value?.menuIds;
   menuIds.value = [...(saved ?? [])];
 }
 
 function resetDataScope(): void {
-  if (!roleDetail.value) {
+  if (isBusy.value || !roleDetail.value) {
     return;
   }
   dataScope.value = roleDetail.value.dataScope;
@@ -499,7 +594,8 @@ const draftDirty = computed(() => {
     return (
       !sameIdSet(menuIds.value, roleDetail.value.menuIds) ||
       dataScope.value !== roleDetail.value.dataScope ||
-      !sameIdSet(scopeOrgIds.value, roleDetail.value.scopeOrgIds)
+      // 只有自定义范围才比较组织清单，切换档位时的残留勾选不算修改
+      (dataScope.value === '2' && !sameIdSet(scopeOrgIds.value, roleDetail.value.scopeOrgIds))
     );
   }
   if (subjectDetail.value) {
@@ -510,6 +606,7 @@ const draftDirty = computed(() => {
 
 const discardOpen = ref(false);
 let pendingAction: (() => void) | null = null;
+let pendingLeave: ((allow: boolean) => void) | null = null;
 
 /** 切换授权对象前，如存在未保存草稿则先确认。 */
 function runAfterDiscard(action: () => void): void {
@@ -522,24 +619,54 @@ function runAfterDiscard(action: () => void): void {
 }
 
 function confirmDiscard(): void {
-  discardOpen.value = false;
   const action = pendingAction;
+  const resolveLeave = pendingLeave;
   pendingAction = null;
+  pendingLeave = null;
+  discardOpen.value = false;
+  if (resolveLeave) {
+    resolveLeave(true);
+    return;
+  }
   action?.();
 }
 
 watch(discardOpen, (value) => {
-  if (!value) {
-    pendingAction = null;
+  if (value) {
+    return;
   }
+  pendingAction = null;
+  const resolveLeave = pendingLeave;
+  pendingLeave = null;
+  resolveLeave?.(false);
 });
 
-/* ==================== 保存 ==================== */
-const savingMenus = ref(false);
-const savingScope = ref(false);
+// 离开页面时同样保护未保存草稿，避免切换菜单或刷新丢失修改。
+onBeforeRouteLeave(() => {
+  if (!draftDirty.value) {
+    return true;
+  }
+  if (pendingLeave) {
+    pendingLeave(false);
+    pendingLeave = null;
+  }
+  return new Promise<boolean>((resolve) => {
+    pendingLeave = resolve;
+    discardOpen.value = true;
+  });
+});
 
+function handleBeforeUnload(event: BeforeUnloadEvent): void {
+  if (!draftDirty.value) {
+    return;
+  }
+  event.preventDefault();
+  event.returnValue = '';
+}
+
+/* ==================== 保存 ==================== */
 async function saveMenus(): Promise<void> {
-  if (!hasDetail.value || currentLocked.value || !canSaveMenus.value) {
+  if (!hasDetail.value || currentLocked.value || !canSaveMenus.value || isBusy.value) {
     return;
   }
   savingMenus.value = true;
@@ -572,7 +699,7 @@ async function saveMenus(): Promise<void> {
 }
 
 async function saveDataScope(): Promise<void> {
-  if (!roleDetail.value || currentLocked.value || !canSaveScope.value) {
+  if (!roleDetail.value || currentLocked.value || !canSaveScope.value || isBusy.value) {
     return;
   }
   savingScope.value = true;
@@ -601,12 +728,17 @@ async function saveDataScope(): Promise<void> {
 
 /* ==================== 刷新与路由联动 ==================== */
 async function doRefreshAll(): Promise<void> {
-  await loadBaseData();
-  await loadPermissionDetail();
-  toast.success('权限数据已刷新');
+  const baseOk = await loadBaseData();
+  const detailOk = await loadPermissionDetail();
+  if (baseOk && detailOk) {
+    toast.success('权限数据已刷新');
+  }
 }
 
 async function refreshAll(): Promise<void> {
+  if (isBusy.value) {
+    return;
+  }
   if (draftDirty.value) {
     runAfterDiscard(() => void doRefreshAll());
     return;
@@ -626,8 +758,11 @@ function readRoleId(value: unknown): number | null {
 watch(
   () => route.query.roleId,
   (value) => {
+    if (isBusy.value) {
+      return;
+    }
     const roleId = readRoleId(value);
-    if (!roleId || !roles.value.some((role) => role.roleId === roleId)) {
+    if (!roleId || !canLoadRoles.value || !roles.value.some((role) => role.roleId === roleId)) {
       return;
     }
     if (isRole.value && selectedRoleId.value === roleId) {
@@ -643,13 +778,14 @@ watch(
 );
 
 onMounted(async () => {
+  window.addEventListener('beforeunload', handleBeforeUnload);
   await loadBaseData();
 
   const queryRoleId = readRoleId(route.query.roleId);
-  if (queryRoleId && roles.value.some((role) => role.roleId === queryRoleId)) {
+  if (queryRoleId && canLoadRoles.value && roles.value.some((role) => role.roleId === queryRoleId)) {
     activeTab.value = 'role';
     selectedRoleId.value = queryRoleId;
-  } else {
+  } else if (canLoadOrgs.value) {
     activeTab.value = 'postorg';
     if (subjectType.value !== 'post') {
       subjectType.value = 'org';
@@ -657,9 +793,22 @@ onMounted(async () => {
     if (selectedOrgId.value === null) {
       selectedOrgId.value = orgRows.value[0]?.org.orgId ?? null;
     }
+  } else if (canLoadRoles.value) {
+    activeTab.value = 'role';
+    if (selectedRoleId.value === null) {
+      selectedRoleId.value = roles.value[0]?.roleId ?? null;
+    }
   }
 
   await loadPermissionDetail();
+});
+
+onUnmounted(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload);
+  if (pendingLeave) {
+    pendingLeave(false);
+    pendingLeave = null;
+  }
 });
 </script>
 
@@ -670,7 +819,7 @@ onMounted(async () => {
       description="左侧选择授权对象（组织 / 岗位 / 角色），右侧勾选菜单与动作权限；角色另可配置数据范围。"
     >
       <template #actions>
-        <Button variant="outline" size="sm" :disabled="baseLoading" @click="refreshAll">
+        <Button variant="outline" size="sm" :disabled="baseLoading || isBusy" @click="refreshAll">
           <RefreshCw class="size-4" :class="baseLoading && 'animate-spin'" />
           刷新
         </Button>
@@ -685,24 +834,28 @@ onMounted(async () => {
         <div class="flex items-center gap-1 border-b p-1.5">
           <button
             type="button"
-            class="flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors"
+            class="flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             :class="
               activeTab === 'postorg'
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:bg-muted'
             "
+            :disabled="!canLoadOrgs || isBusy"
+            :aria-pressed="activeTab === 'postorg'"
             @click="switchTab('postorg')"
           >
             岗位 / 组织权限
           </button>
           <button
             type="button"
-            class="flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors"
+            class="flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             :class="
               activeTab === 'role'
                 ? 'bg-primary text-primary-foreground shadow-sm'
                 : 'text-muted-foreground hover:bg-muted'
             "
+            :disabled="!canLoadRoles || isBusy"
+            :aria-pressed="activeTab === 'role'"
             @click="switchTab('role')"
           >
             角色权限
@@ -713,6 +866,16 @@ onMounted(async () => {
               {{ roles.length }}
             </span>
           </button>
+        </div>
+
+        <div
+          v-if="baseError && !baseLoading"
+          class="flex items-start gap-2 border-b bg-destructive/5 px-3 py-2 text-[11px] leading-relaxed text-destructive"
+          role="alert"
+        >
+          <AlertCircle class="mt-0.5 size-3.5 shrink-0" />
+          <span class="min-w-0 flex-1">{{ baseError }}</span>
+          <button type="button" class="shrink-0 underline" @click="refreshAll">重试</button>
         </div>
 
         <div v-if="activeTab === 'role'" class="border-b p-2">
@@ -770,8 +933,14 @@ onMounted(async () => {
                 </span>
               </span>
             </button>
-            <EmptyState v-if="!filteredRoles.length" compact text="没有匹配的角色">
-              <Button variant="ghost" size="sm" @click="roleKeyword = ''">清空搜索</Button>
+            <EmptyState
+              v-if="!filteredRoles.length"
+              compact
+              :text="canLoadRoles ? '没有匹配的角色' : '当前账号缺少角色查询权限'"
+            >
+              <Button v-if="roleKeyword" variant="ghost" size="sm" @click="roleKeyword = ''">
+                清空搜索
+              </Button>
             </EmptyState>
           </template>
 
@@ -807,6 +976,8 @@ onMounted(async () => {
                 type="button"
                 class="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-background"
                 :title="collapsedOrgs.has(row.org.orgId) ? '展开下级' : '收起下级'"
+                :aria-label="collapsedOrgs.has(row.org.orgId) ? '展开下级' : '收起下级'"
+                :aria-expanded="!collapsedOrgs.has(row.org.orgId)"
                 @click.stop="toggleOrgCollapse(row.org.orgId)"
               >
                 <ChevronRight v-if="collapsedOrgs.has(row.org.orgId)" class="size-3" />
@@ -848,12 +1019,23 @@ onMounted(async () => {
                 {{ row.post.headcount }}
               </span>
             </div>
-            <EmptyState v-if="!leftRows.length" compact text="暂无组织或岗位" />
+            <EmptyState
+              v-if="!leftRows.length"
+              compact
+              :text="
+                !canLoadOrgs
+                  ? '当前账号缺少组织查询权限'
+                  : baseError
+                    ? '组织或岗位数据加载失败'
+                    : '暂无组织或岗位'
+              "
+            />
           </template>
         </div>
 
         <div class="border-t bg-muted/20 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
           最终权限 = 角色 ∪ 岗位 ∪ 组织；组织权限沿组织树向下继承。
+          <p v-if="postNotice" class="mt-1 text-amber-700">{{ postNotice }}</p>
         </div>
       </aside>
 
@@ -883,7 +1065,7 @@ onMounted(async () => {
                   <Lock class="size-3" />
                   锁定
                 </Badge>
-                <Badge v-else-if="!canSaveMenus" variant="muted">只读</Badge>
+                <Badge v-else-if="!canEditCurrent" variant="muted">只读</Badge>
                 <Badge v-else variant="success">可编辑</Badge>
               </div>
               <p v-if="subjectSub" class="mt-1 truncate font-mono text-[11px] text-muted-foreground">
@@ -900,24 +1082,28 @@ onMounted(async () => {
             >
               <button
                 type="button"
-                class="rounded-md px-2.5 py-1 text-xs transition-colors"
+                class="rounded-md px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                 :class="
                   roleRightTab === 'menu'
                     ? 'bg-background font-medium text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                 "
+                :disabled="isBusy"
+                :aria-pressed="roleRightTab === 'menu'"
                 @click="switchRoleRightTab('menu')"
               >
                 菜单权限
               </button>
               <button
                 type="button"
-                class="rounded-md px-2.5 py-1 text-xs transition-colors"
+                class="rounded-md px-2.5 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                 :class="
                   roleRightTab === 'data'
                     ? 'bg-background font-medium text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
                 "
+                :disabled="isBusy"
+                :aria-pressed="roleRightTab === 'data'"
                 @click="switchRoleRightTab('data')"
               >
                 数据权限
@@ -930,9 +1116,7 @@ onMounted(async () => {
           v-if="!hasSelection"
           class="flex min-h-72 items-center justify-center rounded-xl border bg-card shadow-sm"
         >
-          <EmptyState
-            :text="isRole ? '暂无可配置的角色，请先在角色管理中创建角色' : '暂无可配置的组织或岗位'"
-          />
+          <EmptyState :text="emptySelectionText" />
         </div>
 
         <div
@@ -971,6 +1155,7 @@ onMounted(async () => {
             :loading="savingScope"
             :locked="currentLocked"
             :readonly="!canSaveScope"
+            :dirty="draftDirty"
             @save="saveDataScope"
             @reset="resetDataScope"
           />
@@ -982,7 +1167,8 @@ onMounted(async () => {
               :loading="detailLoading"
               :locked="currentLocked"
               :readonly="!canSaveMenus"
-              :empty-text="menuTree.length ? '没有匹配的菜单' : '菜单树为空，请先在菜单管理中维护'"
+              :busy="savingMenus"
+              :empty-text="menuTree.length ? '没有匹配的菜单' : menuEmptyText"
             />
 
             <div

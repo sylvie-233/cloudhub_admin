@@ -27,10 +27,12 @@ const props = withDefaults(
     post: PostTreeNode | null;
     orgId: number;
     parentOptions: PostParentOption[];
+    parentLoading?: boolean;
+    canSetLeader?: boolean;
     saving?: boolean;
     error?: string;
   }>(),
-  { saving: false, error: '' },
+  { parentLoading: false, canSetLeader: false, saving: false, error: '' },
 );
 
 const open = defineModel<boolean>('open', { default: false });
@@ -45,7 +47,7 @@ const emit = defineEmits<{
       postCode?: string;
       postSort: number;
       status: Status;
-      isLeader: boolean;
+      isLeader?: boolean;
     },
   ];
 }>();
@@ -101,7 +103,7 @@ function handleSubmit(): void {
     postCode: form.value.postCode.trim() || undefined,
     postSort: Number(form.value.postSort) || 0,
     status: form.value.status,
-    isLeader: form.value.isLeader,
+    ...(props.canSetLeader ? { isLeader: form.value.isLeader } : {}),
   });
 }
 
@@ -118,7 +120,7 @@ watch(
 
 <template>
   <Dialog v-model:open="open">
-    <DialogContent class="max-w-xl">
+    <DialogContent class="max-w-xl" :close-disabled="props.saving">
       <DialogHeader>
         <DialogTitle>{{ isEdit ? '编辑岗位' : '新增岗位' }}</DialogTitle>
         <DialogDescription>
@@ -128,14 +130,18 @@ watch(
 
       <div class="grid gap-4 sm:grid-cols-2">
         <FormItem label="岗位名称" for="post-name" required>
-          <Input id="post-name" v-model="form.postName" placeholder="如：前端工程师" maxlength="50" />
+          <Input id="post-name" v-model="form.postName" placeholder="如：前端工程师" maxlength="64" />
         </FormItem>
 
         <FormItem label="岗位编码" for="post-code" hint="留空将按 GW + 日期 + 序列生成">
-          <Input id="post-code" v-model="form.postCode" placeholder="自动生成" maxlength="30" />
+          <Input id="post-code" v-model="form.postCode" placeholder="自动生成" maxlength="64" />
         </FormItem>
 
-        <FormItem label="上级岗位" for="post-parent" hint="可选择其他组织的岗位">
+        <FormItem
+          label="上级岗位"
+          for="post-parent"
+          :hint="props.parentLoading ? '正在加载跨组织岗位候选…' : '可选择其他组织的岗位'"
+        >
           <Select v-model="form.parentId">
             <SelectTrigger id="post-parent" class="w-full">
               <SelectValue placeholder="无上级岗位" />
@@ -169,7 +175,12 @@ watch(
           </Select>
         </FormItem>
 
-        <FormItem label="责任岗位" for="post-leader" hint="每个组织仅有一个责任岗位">
+        <FormItem
+          v-if="props.canSetLeader"
+          label="责任岗位"
+          for="post-leader"
+          hint="每个组织仅有一个责任岗位"
+        >
           <div
             class="flex h-9 items-center justify-between rounded-md border bg-background px-3"
           >
@@ -188,8 +199,8 @@ watch(
 
       <DialogFooter>
         <Button variant="outline" :disabled="props.saving" @click="open = false">取消</Button>
-        <Button :disabled="props.saving" @click="handleSubmit">
-          <Loader2 v-if="props.saving" class="size-4 animate-spin" />
+        <Button :disabled="props.saving || props.parentLoading" @click="handleSubmit">
+          <Loader2 v-if="props.saving || props.parentLoading" class="size-4 animate-spin" />
           {{ isEdit ? '保存修改' : '创建岗位' }}
         </Button>
       </DialogFooter>

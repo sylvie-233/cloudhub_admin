@@ -683,12 +683,12 @@ function iconSvg(key, size){
 
 /* 菜单：按规格生成，动作ID = 菜单ID + 序号 */
 const MENU_SPEC = [
-  {key:'user', id:1001, name:'用户管理', path:'user', comp:'system/user/index', btns:[['用户查询','query'],['用户新增','add'],['用户修改','edit'],['用户删除','remove'],['重置密码','resetPwd'],['分配角色','authRole'],['查看权限','view']]},
-  {key:'org',  id:1002, name:'组织管理', path:'org',  comp:'system/org/index',  btns:[['组织查询','query',10021],['组织新增','add',10022],['组织修改','edit',10023],['组织删除','remove',10024],['设置责任岗位','setLeader',10025],['岗位查询','query',10031,'system:post:query'],['岗位新增','add',10032,'system:post:add'],['岗位修改','edit',10033,'system:post:edit'],['岗位删除','remove',10034,'system:post:remove']]},
-  {key:'role', id:1004, name:'角色管理', path:'role', comp:'system/role/index', btns:[['角色查询','query'],['角色新增','add'],['角色修改','edit'],['角色删除','remove'],['分配用户','authUser',10046]]},
-  {key:'menu', id:1005, name:'菜单管理', path:'menu', comp:'system/menu/index', btns:[['菜单查询','query'],['菜单新增','add'],['菜单修改','edit'],['菜单删除','remove']]},
-  {key:'perm', id:1006, name:'权限管理', path:'perm', comp:'system/perm/index', btns:[['权限查询','query',10061],['权限保存','save',10062],['数据权限','dataScope',10063]]},
-  {key:'logininfor', id:1007, name:'系统日志', path:'log', comp:'monitor/logininfor/index', btns:[['日志查询','query',10071],['日志导出','export',10072],['日志删除','remove',10073],['清空日志','clean',10074]]}
+  {key:'user', id:1001, name:'用户管理', path:'users', comp:'views/UserView.vue', btns:[['用户查询','query'],['用户新增','add'],['用户修改','edit'],['用户删除','remove'],['重置密码','resetPwd'],['分配角色','authRole'],['查看权限','view']]},
+  {key:'org',  id:1002, name:'组织管理', path:'orgs',  comp:'views/OrgView.vue',  btns:[['组织查询','query',10021],['组织新增','add',10022],['组织修改','edit',10023],['组织删除','remove',10024],['设置责任岗位','setLeader',10025],['岗位查询','query',10031,'system:post:query'],['岗位新增','add',10032,'system:post:add'],['岗位修改','edit',10033,'system:post:edit'],['岗位删除','remove',10034,'system:post:remove']]},
+  {key:'role', id:1004, name:'角色管理', path:'roles', comp:'views/RoleView.vue', btns:[['角色查询','query'],['角色新增','add'],['角色修改','edit'],['角色删除','remove'],['分配用户','authUser',10046]]},
+  {key:'menu', id:1005, name:'菜单管理', path:'menus', comp:'views/MenuView.vue', btns:[['菜单查询','query'],['菜单新增','add'],['菜单修改','edit'],['菜单删除','remove']]},
+  {key:'perm', id:1006, name:'权限管理', path:'permissions', comp:'views/PermissionView.vue', btns:[['权限查询','query',10061],['权限保存','save',10062],['数据权限','dataScope',10063]]},
+  {key:'logininfor', id:1007, name:'系统日志', path:'logs', comp:'views/LogView.vue', btns:[['日志查询','query',10071],['日志导出','export',10072],['日志删除','remove',10073],['清空日志','clean',10074]]}
 ];
 
 const DB = {

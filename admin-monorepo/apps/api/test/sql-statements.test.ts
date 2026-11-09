@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildLogFilter, selectLogininforsPage } from '../src/sql/log.sql.js';
+import { selectMenuPathConflict } from '../src/sql/menu.sql.js';
 import { buildOrgUserFilter, selectOrgUsersPage } from '../src/sql/org.sql.js';
 import { selectPostHeadcountsByIds } from '../src/sql/post.sql.js';
 import { selectRoleMenuCount } from '../src/sql/role.sql.js';
@@ -140,5 +141,15 @@ describe('SQL 语句参数拼装', () => {
     expect(stmt.params).toEqual([5]);
     expect(stmt.sql).toContain(`m.status = '0'`);
     expect(stmt.sql).toContain(`m.menu_type IN ('M', 'C')`);
+  });
+
+  it('菜单路由重复校验支持排除当前菜单', () => {
+    const createStmt = selectMenuPathConflict('users');
+    const updateStmt = selectMenuPathConflict('users', 1001);
+
+    expect(createStmt.params).toEqual(['users']);
+    expect(createStmt.sql).toContain(`menu_type = 'C'`);
+    expect(updateStmt.params).toEqual(['users', 1001]);
+    expect(updateStmt.sql).toContain('menu_id <> ?');
   });
 });

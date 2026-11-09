@@ -4,6 +4,7 @@ import type {
   PostTreeNode,
   UpdatePostInput,
 } from '@cloudhub/types';
+import { PERMS } from '@cloudhub/types';
 
 import { dbClient, executeOn } from '../db/index.js';
 import {
@@ -21,6 +22,14 @@ import type { OrgRefRow, PostRow } from '../sql/post.sql.js';
 import { generateBizCode } from '../utils/code.js';
 import { HttpError } from '../utils/http.js';
 import { getOrgPathMap } from './org.service.js';
+import { userHasPermission } from './permission.service.js';
+
+/** 设置/取消责任岗位需要独立授权，避免岗位编辑权限绕过组织负责人配置。 */
+async function assertCanSetLeader(operatorUserId: number): Promise<void> {
+  if (!(await userHasPermission(operatorUserId, PERMS.ORG_SET_LEADER))) {
+    throw new HttpError(403, '没有设置责任岗位的权限');
+  }
+}
 
 async function findPostRow(postId: number): Promise<PostRow | null> {
   const stmt = selectPostById(postId);
@@ -125,7 +134,11 @@ export async function getPostDetail(postId: number): Promise<PostDetail> {
 export async function createPost(
   input: CreatePostInput,
   operator: string,
+  operatorUserId: number,
 ): Promise<PostDetail> {
+  if (input.isLeader) {
+    await assertCanSetLeader(operatorUserId);
+  }
   const org = await requireOrg(input.orgId);
   const parentId = input.parentId ?? 0;
 
@@ -183,7 +196,11 @@ export async function updatePost(
   postId: number,
   input: UpdatePostInput,
   operator: string,
+  operatorUserId: number,
 ): Promise<PostDetail> {
+  if (input.isLeader !== undefined) {
+    await assertCanSetLeader(operatorUserId);
+  }
   const current = await requirePost(postId);
   const orgId = input.orgId ?? current.orgId;
   const org = await requireOrg(orgId);

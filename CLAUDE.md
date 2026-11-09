@@ -13,7 +13,7 @@
 4. **责任岗位**：每个组织有且仅有一个 `sys_org.leader_post_id`，在岗人即该组织责任人。岗位表刻意不再冗余 `is_leader`。
 5. **功能权限 = 角色 ∪ 岗位 ∪ 组织**：`sys_role_menu`（授予用户的角色）∪ `sys_post_menu`（岗位直授）∪ `sys_org_menu`（组织直授，沿组织树向下继承）。岗位与组织绝不经过角色取得权限。
 6. **数据权限只来源于角色**：`sys_role.data_scope` —— `1` 全部、`2` 自定义（经 `sys_role_scope_org`）、`3` 本组织、`4` 本组织及以下、`5` 仅本人。无角色的用户兜底为「仅本人」。岗位/组织直授不携带数据范围。
-7. **菜单分三级**：`M` 目录 / `C` 菜单 / `F` 动作。`F` 行的 `perms` 即后端鉴权点。
+7. **菜单分三级**：`M` 目录 / `C` 菜单 / `F` 动作。`C` 的 `path` 是布局下的扁平一级路由（如 `users` → `/users`），`component` 是前端 `views` 目录下的 `.vue` 组件；`M` 只作导航分组，`F` 只作后端鉴权点，二者不配置路由字段。
 8. **授权入口统一收敛在「权限管理」页**（`system:perm:save`、`system:perm:dataScope`）。原有的 `system:post:perm` 与 `system:role:authMenu` 动作已被有意移除。
 
 `v_user_permission` 是规则 5 的可执行定义：以 `UNION` 合并三个来源，并输出 `grant_source`（`user` / `post` / `org`）与 `source_id`。原型中的对应实现是 `userPermInfo()`，按来源拆分的实现是 `upvSources()`。两者需同步修改。
@@ -42,10 +42,11 @@
 | --- | --- |
 | [src/api/](admin-monorepo/apps/web/src/api/) | `client.ts` 统一注入 Token、解析 `{ code, message, data }` 并将失败转为异常；各模块只封装请求 |
 | [src/stores/](admin-monorepo/apps/web/src/stores/) | `auth.ts` 维护 Token、当前用户与权限集合，登录态失效时清理并跳转登录页 |
-| [src/router/](admin-monorepo/apps/web/src/router/) | 路由表、`meta.title` 与登录/权限守卫 |
-| [src/layouts/](admin-monorepo/apps/web/src/layouts/) | 侧边栏、顶部身份区与内容区；导航项按 `auth.hasPerm()` 过滤 |
-| [src/views/](admin-monorepo/apps/web/src/views/) | 页面：工作台、组织、用户、角色、菜单、权限、日志 |
+| [src/router/](admin-monorepo/apps/web/src/router/) | 静态路由（登录/布局/工作台/404）、按 `profile.menus` 动态注册菜单路由、登录与权限守卫 |
+| [src/layouts/](admin-monorepo/apps/web/src/layouts/) | 侧边栏、顶部身份区与内容区；侧边栏由菜单树生成 |
+| [src/views/](admin-monorepo/apps/web/src/views/) | 页面：工作台、组织、用户、角色、菜单、权限、日志；`C` 菜单通过组件路径映射到这里 |
 | [src/components/](admin-monorepo/apps/web/src/components/) | 业务组件：通用弹窗/分页/状态徽标、权限树与数据范围面板、用户/组织/岗位/菜单/日志弹窗 |
+| [src/utils/](admin-monorepo/apps/web/src/utils/) | 菜单路由/组件解析、菜单图标映射、树拍平与格式化纯函数 |
 | [src/styles/index.css](admin-monorepo/apps/web/src/styles/index.css) | Tailwind 入口与 shadcn 主题变量 |
 
 共享 UI 包 [@cloudhub/ui](admin-monorepo/packages/ui/) 为源码直接导出的工作区包（入口 `src/index.ts`，不单独构建），组件按 shadcn-vue 约定放在 `packages/ui/src/components/<component>/`。新增组件后从 `src/index.ts` 导出；Tailwind 已通过 `@source` 扫描该包，样式类可直接生效。
@@ -56,6 +57,13 @@
 - 超级管理员角色（`roleId = 1`）锁定，不可修改菜单与数据范围；无 `system:perm:save` / `system:perm:dataScope` 时对应面板只读。
 - 按钮级权限统一使用 `PERMS` 常量与 `auth.hasPerm()`，不要在页面散落权限字符串。
 - 日志页支持筛选、分页、详情、批量删除、清空与 CSV 导出；所有接口沿用后端分页结构。
+
+### 前端路由与菜单
+
+- 静态路由只保留 `/login`、布局壳、`/dashboard` 与 404；登录或刷新后由 `router.beforeEach` 读取 `profile.menus`，用 `buildMenuRoutes` 动态注册权限内的 `C` 菜单路由（路由名 `menu-${menuId}`）。
+- `M` 只作为侧边栏分组，不产生路由；`F` 不出现在 `profile.menus`，只用于按钮与接口鉴权。侧边栏由 `buildNavGroups` 从同一份菜单生成，避免导航与路由各写一套。
+- `C` 菜单的 `path` 是布局下一级地址（如 `users` → `/users`），`component` 指向 `src/views/` 下真实存在的 `.vue` 文件（如 `views/UserView.vue`）。菜单表单会校验必填、格式、重复地址、内置路由冲突与组件文件是否存在；后端 `menu.service` 再次校验并规范化。
+- 动态路由在退出、令牌失效与菜单权限刷新时清理并重建；权限变更导致当前页失效时回到工作台。页面内跳转不要写死路由名，按 `PERMS` 用 `findMenuPathByPerm()` 解析菜单地址。
 
 ### 本地开发
 
@@ -116,6 +124,7 @@ pnpm typecheck && pnpm lint            # 全 workspace 校验
 - 数据范围由 service 调 `resolveDataScope(userId)` 解析，多角色取最宽的一档，无角色兜底「仅本人」。
 - 软删除与状态过滤必须显式写入每条查询（`del_flag = '0'`、`status = '0'`），没有外键兜底。
 - 时间字段以字符串返回（连接池 `dateStrings: true`），格式 `YYYY-MM-DD HH:mm:ss`；操作人取自 `c.get('currentUser')`，写入 `create_by` / `update_by`。
+- `C` 菜单必须提供 `path` 与 `component`，由 `menu.service` 统一校验格式、内置路由冲突与重复地址，并把组件规范化为 `views/....vue`；`M` / `F` 的 `path` 与 `component` 自动清空。
 
 ### 新增接口
 

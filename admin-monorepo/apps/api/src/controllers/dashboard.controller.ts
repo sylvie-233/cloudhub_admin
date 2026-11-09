@@ -4,5 +4,6 @@ import { success } from '../utils/http.js';
 
 /** GET /api/dashboard/stats */
 export async function getDashboardStats(c: AppContext): Promise<Response> {
-  return success(c, await loadStats());
+  const { userId } = c.get('currentUser');
+  return success(c, await loadStats(userId));
 }

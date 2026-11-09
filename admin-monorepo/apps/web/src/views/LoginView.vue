@@ -23,9 +23,9 @@ const router = useRouter();
 const auth = useAuthStore();
 
 const rememberedAccount = localStorage.getItem(REMEMBER_KEY) ?? '';
-const userName = ref(rememberedAccount || 'admin');
-const password = ref('admin123');
-const remember = ref(true);
+const userName = ref(rememberedAccount);
+const password = ref('');
+const remember = ref(Boolean(rememberedAccount));
 const showPassword = ref(false);
 const submitting = ref(false);
 const formError = ref('');
@@ -38,7 +38,13 @@ const features = [
 
 function safeRedirect(): string {
   const raw = typeof route.query.redirect === 'string' ? route.query.redirect : '';
-  if (raw.startsWith('/') && !raw.startsWith('//') && !raw.startsWith('/login')) {
+  const path = raw.split(/[?#]/, 1)[0] ?? '';
+  if (
+    raw.startsWith('/') &&
+    !raw.startsWith('//') &&
+    path !== '/login' &&
+    !path.startsWith('/login/')
+  ) {
     return raw;
   }
   return '/dashboard';
@@ -67,12 +73,13 @@ async function handleSubmit(): Promise<void> {
   formError.value = '';
   submitting.value = true;
   try {
+    const profile = await auth.login({ userName: account, password: password.value });
+    // 仅在登录成功后记住账号，避免把无效账号写入本地存储
     if (remember.value) {
       localStorage.setItem(REMEMBER_KEY, account);
     } else {
       localStorage.removeItem(REMEMBER_KEY);
     }
-    const profile = await auth.login({ userName: account, password: password.value });
     toast.success(`欢迎回来，${profile.nickName || profile.userName}`);
     await router.replace(safeRedirect());
   } catch (error) {
@@ -177,6 +184,8 @@ async function handleSubmit(): Promise<void> {
                 type="button"
                 class="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
                 :title="showPassword ? '隐藏密码' : '显示密码'"
+                :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+                :aria-pressed="showPassword"
                 @click="showPassword = !showPassword"
               >
                 <EyeOff v-if="showPassword" class="size-4" />
@@ -199,6 +208,7 @@ async function handleSubmit(): Promise<void> {
 
           <p
             v-if="formError"
+            role="alert"
             class="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
           >
             {{ formError }}

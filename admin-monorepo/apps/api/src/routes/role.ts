@@ -76,7 +76,8 @@ const assignUsersRoute = createRoute({
   path: '/{id}/users',
   tags: ['角色'],
   summary: '设置角色成员',
-  description: '全量替换角色成员；超级管理员角色必须保留内置 admin 用户。',
+  description:
+    '全量替换角色成员；超级管理员角色成员固定为内置 admin 用户，不接受其他成员。',
   middleware: [requirePerm(PERMS.ROLE_AUTH_USER)],
   request: {
     params: idParamsSchema,

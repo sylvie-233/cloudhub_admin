@@ -268,6 +268,11 @@ export interface DashboardStats {
   recentLogins: Logininfor[];
 }
 
+/** 批量操作结果：受影响记录数。 */
+export interface AffectedResult {
+  affected: number;
+}
+
 /** 路由通用 ID 参数。 */
 export interface IdParam {
   id: number;

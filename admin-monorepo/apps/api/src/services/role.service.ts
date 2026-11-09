@@ -222,8 +222,8 @@ export async function assignRoleUsers(
   await requireRole(roleId);
   const unique = Array.from(new Set(userIds));
 
-  if (roleId === 1 && !unique.includes(1)) {
-    throw new HttpError(400, '超级管理员角色必须保留内置 admin 用户');
+  if (roleId === 1 && (unique.length !== 1 || unique[0] !== 1)) {
+    throw new HttpError(400, '超级管理员角色成员固定为内置 admin 用户');
   }
 
   if (unique.length > 0) {

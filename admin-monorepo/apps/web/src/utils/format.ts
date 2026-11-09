@@ -19,6 +19,20 @@ export interface FlatMenuNode {
   hasChildren: boolean;
 }
 
+/** 菜单路由地址规范化：去空白、反斜杠转斜杠、去掉首尾斜杠并折叠重复斜杠。 */
+export function normalizeMenuPath(path: string | null | undefined): string {
+  return (path ?? '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '')
+    .replace(/\/+/g, '/');
+}
+
+/** 视图组件路径规范化：去空白、反斜杠转斜杠，并去掉开头的 ./ 或 /。 */
+export function normalizeViewComponentPath(component: string | null | undefined): string {
+  return (component ?? '').trim().replace(/\\/g, '/').replace(/^(?:\.?\/)+/, '');
+}
+
 /** 组织树拍平；collapsed 中的节点不展开下级。 */
 export function flattenOrgTree(
   nodes: OrgTreeNode[],
