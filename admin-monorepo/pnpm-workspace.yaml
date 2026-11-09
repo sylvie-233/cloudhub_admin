@@ -2,6 +2,10 @@ packages:
   - 'apps/*'
   - 'packages/*'
 
+# 共享依赖版本目录：多处直接引用的第三方包在此统一版本
+catalog:
+  lucide-vue-next: ^1.0.0
+
 # 允许 esbuild 执行安装脚本（pnpm 10 默认拦截依赖构建脚本）
 onlyBuiltDependencies:
   - esbuild

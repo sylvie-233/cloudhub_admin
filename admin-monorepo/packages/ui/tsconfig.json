@@ -1,0 +1,7 @@
+{
+  "extends": "@cloudhub/tsconfig/vue.json",
+  "compilerOptions": {
+    "types": []
+  },
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"]
+}

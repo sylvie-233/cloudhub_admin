@@ -32,6 +32,48 @@
 - SQL 文件头记录了 v4 中刻意删除的字段（如 `sys_post.is_leader`、`sys_post.is_auto`、`sys_menu.visible`、`sys_user.avatar`）。未经明确的模型变更，不要重新引入。
 
 
+## 前端（admin-monorepo/apps/web）
+
+**技术栈**：Vue 3.5、TypeScript、Vite 6、Vue Router 4、Pinia 3、Tailwind CSS v4，组件采用 shadcn-vue 风格并封装在 [@cloudhub/ui](admin-monorepo/packages/ui/)，图标直接使用 lucide-vue-next（版本由根目录 `pnpm-workspace.yaml` 的 catalog 统一），提示组件 `Sonner` 与 `toast` 方法由 `@cloudhub/ui` 再导出（内部基于 vue-sonner，应用侧不直接依赖）。所有 `.vue` 文件的 `<script setup>` 块必须位于模板之前（ESLint `vue/block-order` 强制）。
+
+### 目录职责
+
+| 目录 | 职责 |
+| --- | --- |
+| [src/api/](admin-monorepo/apps/web/src/api/) | `client.ts` 统一注入 Token、解析 `{ code, message, data }` 并将失败转为异常；各模块只封装请求 |
+| [src/stores/](admin-monorepo/apps/web/src/stores/) | `auth.ts` 维护 Token、当前用户与权限集合，登录态失效时清理并跳转登录页 |
+| [src/router/](admin-monorepo/apps/web/src/router/) | 路由表、`meta.title` 与登录/权限守卫 |
+| [src/layouts/](admin-monorepo/apps/web/src/layouts/) | 侧边栏、顶部身份区与内容区；导航项按 `auth.hasPerm()` 过滤 |
+| [src/views/](admin-monorepo/apps/web/src/views/) | 页面：工作台、组织、用户、角色、菜单、权限、日志 |
+| [src/components/](admin-monorepo/apps/web/src/components/) | 业务组件：通用弹窗/分页/状态徽标、权限树与数据范围面板、用户/组织/岗位/菜单/日志弹窗 |
+| [src/styles/index.css](admin-monorepo/apps/web/src/styles/index.css) | Tailwind 入口与 shadcn 主题变量 |
+
+共享 UI 包 [@cloudhub/ui](admin-monorepo/packages/ui/) 为源码直接导出的工作区包（入口 `src/index.ts`，不单独构建），组件按 shadcn-vue 约定放在 `packages/ui/src/components/<component>/`。新增组件后从 `src/index.ts` 导出；Tailwind 已通过 `@source` 扫描该包，样式类可直接生效。
+
+### 页面与权限
+
+- 权限管理页左侧为「组织 / 岗位」混合树与角色列表，右侧按角色切换「菜单权限 / 数据权限」；岗位、组织只配置菜单，角色可配置 `sys_role_menu` 与数据范围。
+- 超级管理员角色（`roleId = 1`）锁定，不可修改菜单与数据范围；无 `system:perm:save` / `system:perm:dataScope` 时对应面板只读。
+- 按钮级权限统一使用 `PERMS` 常量与 `auth.hasPerm()`，不要在页面散落权限字符串。
+- 日志页支持筛选、分页、详情、批量删除、清空与 CSV 导出；所有接口沿用后端分页结构。
+
+### 本地开发
+
+```bash
+cd admin-monorepo
+pnpm install
+pnpm --filter @cloudhub/web dev        # Vite，默认 http://localhost:5173
+pnpm --filter @cloudhub/web typecheck
+pnpm --filter @cloudhub/web lint
+pnpm --filter @cloudhub/web build      # 产物在 apps/web/dist
+pnpm typecheck && pnpm lint            # 全 workspace 校验
+```
+
+开发态由 Vite 将 `/api` 代理到 `http://127.0.0.1:3000`，需先启动 API。登录账号取自 SQL 种子数据（`admin` / `admin123`），登录后 Token 保存在 localStorage。
+
+生产镜像见 [apps/web/Dockerfile](admin-monorepo/apps/web/Dockerfile)：Node 构建 `apps/web/dist` 后交由 Nginx 托管，[nginx.conf](admin-monorepo/apps/web/nginx.conf) 提供 SPA 路由回退、静态资源缓存，并将 `/api` 反向代理到 Compose 中的 `api:3000`。
+
+
 ## 后端（admin-monorepo/apps/api）
 
 **技术栈**：Node.js 20+、Hono 4、`@hono/zod-openapi`、Zod 4、mysql2 + Drizzle ORM、JWT（`hono/jwt`）、tsup、pnpm workspace + Turbo。API 为 ESM，相对导入必须带 `.js` 后缀。
@@ -100,7 +142,8 @@ pnpm build                             # turbo 构建全部 workspace（含共�
 
 ### 容器与运维
 
-- 镜像：[apps/api/Dockerfile](admin-monorepo/apps/api/Dockerfile)，多阶段构建，`pnpm --filter @cloudhub/api --prod deploy --legacy` 产出仅含生产依赖的部署目录。
-- 编排：[scripts/docker-compose.yml](scripts/docker-compose.yml) 的 `api` 服务（容器 `cloudhub-api`），等待 MySQL 健康后启动，健康检查请求 `/health`。
-- 运维：`pwsh ./manage.ps1 up|down|restart|reset|build|logs|status|pull [-Target mysql|api|all]`；`up -Target api` 会先重建镜像。
+- API 镜像：[apps/api/Dockerfile](admin-monorepo/apps/api/Dockerfile)，多阶段构建，`pnpm --filter @cloudhub/api --prod deploy --legacy` 产出仅含生产依赖的部署目录。
+- Web 镜像：[apps/web/Dockerfile](admin-monorepo/apps/web/Dockerfile)，Node 阶段执行 `pnpm --filter @cloudhub/web... build`，运行阶段使用 `nginx:1.27-alpine` 托管 `dist`，健康检查请求站点首页。
+- 编排：[scripts/docker-compose.yml](scripts/docker-compose.yml) 的 `api` 服务（容器 `cloudhub-api`）等待 MySQL 健康后启动，健康检查请求 `/health`；`web` 服务（容器 `cloudhub-web`）等待 API 健康后启动，Nginx 将 `/api` 代理至 `api:3000`，默认映射 `http://localhost:8080`。
+- 运维：`pwsh ./manage.ps1 up|down|restart|reset|build|logs|status|pull [-Target mysql|api|web|all]`；`up -Target api|web` 会先重建对应镜像。
 - 环境变量：Compose 见 [scripts/.env.example](scripts/.env.example)，本地运行见 [apps/api/.env.example](admin-monorepo/apps/api/.env.example)；生产环境必须替换 `JWT_SECRET`。

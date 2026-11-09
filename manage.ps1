@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    云枢 Admin 本地环境运维脚本（MySQL + API）。
+    云枢 Admin 本地环境运维脚本（MySQL + API + Web）。
 
 .DESCRIPTION
     封装 scripts/docker-compose.yml 的常用操作：启动、停止、重启、重置、构建、日志、
@@ -8,22 +8,23 @@
 
 .PARAMETER Action
     要执行的操作，默认 status：
-      up       启动目标服务并等待健康检查通过（API 会先重新构建镜像）
+      up       启动目标服务并等待健康检查通过（API / Web 会先重新构建镜像）
       down     停止并移除全部容器（保留数据卷）
       restart  重启目标服务并等待健康检查通过
       reset    删除数据卷后重新启动目标服务（会清空数据库，需确认）
-      build    重新构建 API 镜像
+      build    重新构建 API / Web 镜像
       logs     查看目标服务日志
       cli      进入 MySQL 命令行
       status   查看容器状态与健康检查结果
       init     重新执行 doc/cloudhub_admin_v1.sql（会 DROP 并重建数据库，需确认）
-      pull     拉取 MySQL 镜像；API 使用最新基础镜像重新构建
+      pull     拉取 MySQL 镜像；API / Web 使用最新基础镜像重新构建
 
 .PARAMETER Target
     操作目标，默认 all：
       mysql  仅 MySQL
       api    仅 API（compose 会自动启动其依赖的 MySQL）
-      all    MySQL + API
+      web    仅 Web（compose 会自动启动其依赖的 API 与 MySQL）
+      all    MySQL + API + Web
 
 .PARAMETER Force
     reset / init 跳过二次确认；build 时禁用 Docker 构建缓存。
@@ -47,7 +48,10 @@
     pwsh ./manage.ps1 up -Target mysql
 
 .EXAMPLE
-    pwsh ./manage.ps1 build
+    pwsh ./manage.ps1 up -Target web
+
+.EXAMPLE
+    pwsh ./manage.ps1 build -Target web
 
 .EXAMPLE
     pwsh ./manage.ps1 logs -Target api -Follow -Tail 500
@@ -68,7 +72,7 @@ param(
     [ValidateSet('up', 'down', 'restart', 'reset', 'build', 'logs', 'cli', 'status', 'init', 'pull')]
     [string]$Action = 'status',
 
-    [ValidateSet('mysql', 'api', 'all')]
+    [ValidateSet('mysql', 'api', 'web', 'all')]
     [string]$Target = 'all',
 
     [switch]$Force,
@@ -95,6 +99,7 @@ $ComposeFile = Join-Path $ScriptRoot 'scripts/docker-compose.yml'
 $ContainerNames = @{
     mysql = 'cloudhub-mysql'
     api   = 'cloudhub-api'
+    web   = 'cloudhub-web'
 }
 
 function Assert-Prerequisites {
@@ -128,7 +133,8 @@ function Get-TargetServices {
     switch ($Target) {
         'mysql' { return @('mysql') }
         'api' { return @('api') }
-        default { return @('mysql', 'api') }
+        'web' { return @('web') }
+        default { return @('mysql', 'api', 'web') }
     }
 }
 
@@ -192,6 +198,9 @@ function Wait-TargetHealthy {
     if ($services -contains 'api') {
         Wait-ContainerHealthy -ContainerName $ContainerNames['api'] -DisplayName 'API'
     }
+    if ($services -contains 'web') {
+        Wait-ContainerHealthy -ContainerName $ContainerNames['web'] -DisplayName 'Web'
+    }
 }
 
 function Confirm-Destructive {
@@ -240,8 +249,8 @@ switch ($Action) {
     'up' {
         $services = Get-TargetServices
         $upArgs = @('up', '-d')
-        if ($services -contains 'api') {
-            # 本地开发时确保使用最新代码构建 API
+        if ($services -contains 'api' -or $services -contains 'web') {
+            # 本地开发时确保使用最新代码构建 API / Web
             $upArgs += '--build'
         }
         $upArgs += $services
@@ -266,7 +275,7 @@ switch ($Action) {
 
         $services = Get-TargetServices
         $upArgs = @('up', '-d')
-        if ($services -contains 'api') {
+        if ($services -contains 'api' -or $services -contains 'web') {
             $upArgs += '--build'
         }
         $upArgs += $services
@@ -275,12 +284,16 @@ switch ($Action) {
     }
 
     'build' {
-        Assert-TargetIncludes -Service 'api' -ActionName 'build'
+        $services = Get-TargetServices
+        $buildServices = @($services | Where-Object { $_ -in @('api', 'web') })
+        if ($buildServices.Count -eq 0) {
+            throw 'build 需要目标包含 api 或 web，请使用 -Target api、web 或 all。'
+        }
         $buildArgs = @('build')
         if ($Force) {
             $buildArgs += '--no-cache'
         }
-        $buildArgs += 'api'
+        $buildArgs += $buildServices
         Invoke-Compose -ComposeArgs $buildArgs
     }
 
@@ -339,6 +352,9 @@ switch ($Action) {
         }
         if ($services -contains 'api') {
             Invoke-Compose -ComposeArgs @('build', '--pull', 'api')
+        }
+        if ($services -contains 'web') {
+            Invoke-Compose -ComposeArgs @('build', '--pull', 'web')
         }
     }
 }

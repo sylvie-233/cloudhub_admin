@@ -29,7 +29,8 @@ export default tseslint.config(
     },
     rules: {
       'vue/multi-word-component-names': 'off',
-      'vue/block-order': ['error', { order: ['template', 'script', 'style'] }],
+      // 本项目约定：script 块放在最前，便于先读逻辑再看模板
+      'vue/block-order': ['error', { order: ['script', 'template', 'style'] }],
     },
   },
   // base 中的 Prettier 配置在前，这里需再次放到末尾，覆盖 Vue 插件的格式规则
