@@ -84,7 +84,8 @@ pnpm typecheck && pnpm lint            # 全 workspace 校验
 | --- | --- |
 | [routes/](admin-monorepo/apps/api/src/routes/) | 用 `createRoute` 声明方法、路径、参数、响应与 `requirePerm` 中间件，只做编排 |
 | [controllers/](admin-monorepo/apps/api/src/controllers/) | 解析入参（`parseJson` / `parseQuery` / `parseId`）、调用 service、用 `success()` 输出 |
-| [services/](admin-monorepo/apps/api/src/services/) | 业务规则与 SQL，事务通过 `dbClient.transaction` |
+| [services/](admin-monorepo/apps/api/src/services/) | 业务规则、写操作与事务编排，通过 `dbClient.transaction` |
+| [sql/](admin-monorepo/apps/api/src/sql/) | 按领域拆分的 SQL 语句模块：只读查询、筛选条件构造器、共享列与行类型；统一返回 `{ sql, params }`，执行仍在 service |
 | [validators/](admin-monorepo/apps/api/src/validators/) | 请求参数 Zod schema（只描述入参） |
 | [openapi/models.ts](admin-monorepo/apps/api/src/openapi/models.ts) | 响应模型与 `successResponse` / `errorResponses`（只描述出参，每个模型注明使用它的接口） |
 | [middleware/](admin-monorepo/apps/api/src/middleware/) | `authenticate`（JWT + 回查用户状态）、`requirePerm`（`v_user_permission`）、`errorHandler` |
@@ -118,7 +119,7 @@ pnpm typecheck && pnpm lint            # 全 workspace 校验
 
 ### 新增接口
 
-1. `validators/` 增加入参 schema；2. `services/` 实现业务；3. `openapi/models.ts` 增加响应模型并注明使用接口；4. `routes/` 用 `createRoute` + `routeHandler` 注册；5. 若新增鉴权点，同步 SQL 的 `sys_menu` 与 `PERMS`，并更新 `v_user_permission` 相关说明。
+1. `validators/` 增加入参 schema；2. `sql/` 增加读查询语句（动态条件用函数返回 `{ sql, params }`，Row 类型与语句同文件）；3. `services/` 实现业务与写操作；4. `openapi/models.ts` 增加响应模型并注明使用接口；5. `routes/` 用 `createRoute` + `routeHandler` 注册；6. 若新增鉴权点，同步 SQL 的 `sys_menu` 与 `PERMS`，并更新 `v_user_permission` 相关说明。
 
 ### 本地开发
 

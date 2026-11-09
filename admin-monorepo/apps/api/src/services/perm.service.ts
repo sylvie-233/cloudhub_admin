@@ -1,5 +1,4 @@
 import type {
-  DataScope,
   RolePermissionDetail,
   SetDataScopeInput,
   SubjectPermissionDetail,
@@ -7,24 +6,27 @@ import type {
 import { placeholders } from '@cloudhub/utils';
 
 import { dbClient, executeOn } from '../db/index.js';
+import {
+  selectMenuIdsByIds,
+  selectOrgIdsByIds,
+  selectOrgMenuIdsByOrgId,
+  selectPermissionOrg,
+  selectPermissionPost,
+  selectPermissionRole,
+  selectPostMenuIdsByPostId,
+} from '../sql/perm.sql.js';
+import type {
+  PermissionOrgRow,
+  PermissionPostRow,
+  PermissionRoleRow,
+} from '../sql/perm.sql.js';
 import { HttpError } from '../utils/http.js';
 import { getOrgPathMap } from './org.service.js';
 import { getRoleMenuIds, getRoleScopeOrgIds } from './permission.service.js';
 
-interface RoleRow {
-  roleId: number;
-  roleName: string;
-  roleKey: string;
-  dataScope: DataScope;
-}
-
-async function requireRole(roleId: number): Promise<RoleRow> {
-  const role = await dbClient.queryOne<RoleRow>(
-    `SELECT role_id AS roleId, role_name AS roleName, role_key AS roleKey,
-            data_scope AS dataScope
-       FROM sys_role WHERE role_id = ? AND del_flag = '0' LIMIT 1`,
-    [roleId],
-  );
+async function requireRole(roleId: number): Promise<PermissionRoleRow> {
+  const stmt = selectPermissionRole(roleId);
+  const role = await dbClient.queryOne<PermissionRoleRow>(stmt.sql, stmt.params);
   if (!role) {
     throw new HttpError(404, '角色不存在或已被删除');
   }
@@ -37,10 +39,8 @@ async function assertMenusExist(menuIds: number[]): Promise<void> {
   if (unique.length === 0) {
     return;
   }
-  const rows = await dbClient.query<{ menuId: number }>(
-    `SELECT menu_id AS menuId FROM sys_menu WHERE menu_id IN (${placeholders(unique.length)})`,
-    unique,
-  );
+  const stmt = selectMenuIdsByIds(unique);
+  const rows = await dbClient.query<{ menuId: number }>(stmt.sql, stmt.params);
   if (rows.length !== unique.length) {
     throw new HttpError(400, '存在无效的菜单权限，请刷新后重试');
   }
@@ -113,11 +113,8 @@ export async function setRoleDataScope(
 
   const scopeOrgIds = Array.from(new Set(input.orgIds ?? []));
   if (input.dataScope === '2' && scopeOrgIds.length > 0) {
-    const rows = await dbClient.query<{ orgId: number }>(
-      `SELECT org_id AS orgId FROM sys_org
-        WHERE del_flag = '0' AND org_id IN (${placeholders(scopeOrgIds.length)})`,
-      scopeOrgIds,
-    );
+    const stmt = selectOrgIdsByIds(scopeOrgIds);
+    const rows = await dbClient.query<{ orgId: number }>(stmt.sql, stmt.params);
     if (rows.length !== scopeOrgIds.length) {
       throw new HttpError(400, '存在无效的组织，请刷新后重试');
     }
@@ -146,25 +143,9 @@ export async function setRoleDataScope(
 
 /* ========================= 岗位权限 ========================= */
 
-async function requirePost(postId: number): Promise<{
-  postId: number;
-  postName: string;
-  orgId: number;
-  orgName: string;
-}> {
-  const post = await dbClient.queryOne<{
-    postId: number;
-    postName: string;
-    orgId: number;
-    orgName: string;
-  }>(
-    `SELECT p.post_id AS postId, p.post_name AS postName, p.org_id AS orgId,
-            o.org_name AS orgName
-       FROM sys_post p
-       JOIN sys_org o ON o.org_id = p.org_id AND o.del_flag = '0'
-      WHERE p.post_id = ? AND p.del_flag = '0' LIMIT 1`,
-    [postId],
-  );
+async function requirePost(postId: number): Promise<PermissionPostRow> {
+  const stmt = selectPermissionPost(postId);
+  const post = await dbClient.queryOne<PermissionPostRow>(stmt.sql, stmt.params);
   if (!post) {
     throw new HttpError(404, '岗位不存在或已被删除');
   }
@@ -174,12 +155,10 @@ async function requirePost(postId: number): Promise<{
 /** 岗位直授权限详情。 */
 export async function getPostPermission(postId: number): Promise<SubjectPermissionDetail> {
   const post = await requirePost(postId);
+  const menuStmt = selectPostMenuIdsByPostId(postId);
   const rows = await dbClient.query<{ menuId: number }>(
-    `SELECT pm.menu_id AS menuId FROM sys_post_menu pm
-       JOIN sys_menu m ON m.menu_id = pm.menu_id
-      WHERE pm.post_id = ?
-      ORDER BY pm.menu_id`,
-    [postId],
+    menuStmt.sql,
+    menuStmt.params,
   );
 
   return {
@@ -218,12 +197,9 @@ export async function savePostMenus(
 
 /* ========================= 组织权限 ========================= */
 
-async function requireOrg(orgId: number): Promise<{ orgId: number; orgName: string }> {
-  const org = await dbClient.queryOne<{ orgId: number; orgName: string }>(
-    `SELECT org_id AS orgId, org_name AS orgName
-       FROM sys_org WHERE org_id = ? AND del_flag = '0' LIMIT 1`,
-    [orgId],
-  );
+async function requireOrg(orgId: number): Promise<PermissionOrgRow> {
+  const stmt = selectPermissionOrg(orgId);
+  const org = await dbClient.queryOne<PermissionOrgRow>(stmt.sql, stmt.params);
   if (!org) {
     throw new HttpError(404, '组织不存在或已被删除');
   }
@@ -234,12 +210,10 @@ async function requireOrg(orgId: number): Promise<{ orgId: number; orgName: stri
 export async function getOrgPermission(orgId: number): Promise<SubjectPermissionDetail> {
   const org = await requireOrg(orgId);
   const pathMap = await getOrgPathMap();
+  const menuStmt = selectOrgMenuIdsByOrgId(orgId);
   const rows = await dbClient.query<{ menuId: number }>(
-    `SELECT om.menu_id AS menuId FROM sys_org_menu om
-       JOIN sys_menu m ON m.menu_id = om.menu_id
-      WHERE om.org_id = ?
-      ORDER BY om.menu_id`,
-    [orgId],
+    menuStmt.sql,
+    menuStmt.params,
   );
 
   return {

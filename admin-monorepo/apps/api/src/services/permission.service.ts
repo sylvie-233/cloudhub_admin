@@ -1,8 +1,24 @@
 import type { DataScope, GrantSource, UserMenuNode } from '@cloudhub/types';
 
-import { placeholders } from '@cloudhub/utils';
-
 import { dbClient } from '../db/index.js';
+import {
+  allMenuIds,
+  selectCustomScopeOrgIds,
+  selectOrgMenuIdsForScope,
+  selectPermissionMenuIds,
+  selectPermissionStrings,
+  selectPostMenuIds,
+  selectRoleMenuIds,
+  selectRolePermissionSources,
+  selectRoleScopeOrgIds,
+  selectScopeDescendantOrgIds,
+  selectUserMenus,
+  selectUserOrgScopeRefs,
+  selectUserOwnOrgIds,
+  selectUserPostIds,
+  selectUserRoleScopes,
+} from '../sql/permission.sql.js';
+import type { MenuNavRow, RoleScopeRow } from '../sql/permission.sql.js';
 
 export interface DataScopeResult {
   scope: DataScope;
@@ -10,33 +26,10 @@ export interface DataScopeResult {
   orgIds: number[];
 }
 
-interface RoleScopeRow {
-  roleId: number;
-  dataScope: DataScope;
-}
-
-interface MenuRow {
-  menuId: number;
-  menuName: string;
-  parentId: number;
-  orderNum: number;
-  path: string;
-  component: string | null;
-  menuType: 'M' | 'C';
-  status: '0' | '1';
-  perms: string | null;
-  icon: string;
-}
-
 /** 解析用户的数据范围：多角色取最宽的一档，无角色兜底为「仅本人」。 */
 export async function resolveDataScope(userId: number): Promise<DataScopeResult> {
-  const roles = await dbClient.query<RoleScopeRow>(
-    `SELECT r.role_id AS roleId, r.data_scope AS dataScope
-       FROM sys_user_role ur
-       JOIN sys_role r ON r.role_id = ur.role_id AND r.status = '0' AND r.del_flag = '0'
-      WHERE ur.user_id = ?`,
-    [userId],
-  );
+  const roleStmt = selectUserRoleScopes(userId);
+  const roles = await dbClient.query<RoleScopeRow>(roleStmt.sql, roleStmt.params);
 
   if (roles.length === 0) {
     return { scope: '5', mode: 'self', orgIds: [] };
@@ -54,26 +47,13 @@ export async function resolveDataScope(userId: number): Promise<DataScopeResult>
   }
 
   if (scope === '2') {
-    const rows = await dbClient.query<{ orgId: number }>(
-      `SELECT DISTINCT rs.org_id AS orgId
-         FROM sys_user_role ur
-         JOIN sys_role r ON r.role_id = ur.role_id
-                        AND r.status = '0' AND r.del_flag = '0' AND r.data_scope = '2'
-         JOIN sys_role_scope_org rs ON rs.role_id = r.role_id
-        WHERE ur.user_id = ?`,
-      [userId],
-    );
+    const stmt = selectCustomScopeOrgIds(userId);
+    const rows = await dbClient.query<{ orgId: number }>(stmt.sql, stmt.params);
     return { scope, mode: 'orgs', orgIds: rows.map((row) => row.orgId) };
   }
 
-  const ownOrgs = await dbClient.query<{ orgId: number }>(
-    `SELECT DISTINCT p.org_id AS orgId
-       FROM sys_user_post up
-       JOIN sys_post p ON p.post_id = up.post_id AND p.status = '0' AND p.del_flag = '0'
-       JOIN sys_org o ON o.org_id = p.org_id AND o.del_flag = '0'
-      WHERE up.user_id = ?`,
-    [userId],
-  );
+  const ownStmt = selectUserOwnOrgIds(userId);
+  const ownOrgs = await dbClient.query<{ orgId: number }>(ownStmt.sql, ownStmt.params);
   const ownOrgIds = ownOrgs.map((row) => row.orgId);
 
   if (scope === '3' || ownOrgIds.length === 0) {
@@ -81,13 +61,10 @@ export async function resolveDataScope(userId: number): Promise<DataScopeResult>
   }
 
   // 本组织及以下：本组织 + ancestors 中包含本组织的所有组织
-  const descendantConditions = ownOrgIds.map(() => 'FIND_IN_SET(?, ancestors)').join(' OR ');
+  const descendantStmt = selectScopeDescendantOrgIds(ownOrgIds);
   const rows = await dbClient.query<{ orgId: number }>(
-    `SELECT DISTINCT org_id AS orgId
-       FROM sys_org
-      WHERE del_flag = '0'
-        AND (org_id IN (${placeholders(ownOrgIds.length)}) OR ${descendantConditions})`,
-    [...ownOrgIds, ...ownOrgIds],
+    descendantStmt.sql,
+    descendantStmt.params,
   );
 
   return { scope, mode: 'orgs', orgIds: rows.map((row) => row.orgId) };
@@ -95,37 +72,22 @@ export async function resolveDataScope(userId: number): Promise<DataScopeResult>
 
 /** 用户最终可访问的菜单/动作 ID（角色 ∪ 岗位 ∪ 组织）。 */
 export async function getUserPermissionMenuIds(userId: number): Promise<number[]> {
-  const rows = await dbClient.query<{ menuId: number }>(
-    `SELECT DISTINCT menu_id AS menuId FROM v_user_permission WHERE user_id = ?`,
-    [userId],
-  );
+  const stmt = selectPermissionMenuIds(userId);
+  const rows = await dbClient.query<{ menuId: number }>(stmt.sql, stmt.params);
   return rows.map((row) => row.menuId);
 }
 
 /** 用户最终权限标识集合。 */
 export async function getUserPermissionStrings(userId: number): Promise<string[]> {
-  const rows = await dbClient.query<{ perms: string | null }>(
-    `SELECT DISTINCT perms
-       FROM v_user_permission
-      WHERE user_id = ? AND perms IS NOT NULL AND perms <> ''`,
-    [userId],
-  );
+  const stmt = selectPermissionStrings(userId);
+  const rows = await dbClient.query<{ perms: string | null }>(stmt.sql, stmt.params);
   return rows.map((row) => row.perms).filter((perm): perm is string => Boolean(perm));
 }
 
 /** 用户可访问的菜单树（仅目录与菜单，动作不参与导航）。 */
 export async function getUserMenus(userId: number): Promise<UserMenuNode[]> {
-  const rows = await dbClient.query<MenuRow>(
-    `SELECT m.menu_id AS menuId, m.menu_name AS menuName, m.parent_id AS parentId,
-            m.order_num AS orderNum, m.path, m.component, m.menu_type AS menuType,
-            m.status, m.perms, m.icon
-       FROM sys_menu m
-       JOIN (SELECT DISTINCT menu_id FROM v_user_permission WHERE user_id = ?) vp
-         ON vp.menu_id = m.menu_id
-      WHERE m.status = '0' AND m.menu_type IN ('M', 'C')
-      ORDER BY m.order_num, m.menu_id`,
-    [userId],
-  );
+  const menuStmt = selectUserMenus(userId);
+  const rows = await dbClient.query<MenuNavRow>(menuStmt.sql, menuStmt.params);
 
   const nodes = new Map<number, UserMenuNode>();
   for (const row of rows) {
@@ -155,28 +117,21 @@ export async function getUserMenus(userId: number): Promise<UserMenuNode[]> {
 export async function getRoleMenuIds(roleId: number): Promise<number[]> {
   if (roleId === 1) {
     const rows = await dbClient.query<{ menuId: number }>(
-      `SELECT menu_id AS menuId FROM sys_menu ORDER BY menu_id`,
+      allMenuIds.sql,
+      allMenuIds.params,
     );
     return rows.map((row) => row.menuId);
   }
 
-  const rows = await dbClient.query<{ menuId: number }>(
-    `SELECT rm.menu_id AS menuId
-       FROM sys_role_menu rm
-       JOIN sys_menu m ON m.menu_id = rm.menu_id
-      WHERE rm.role_id = ?
-      ORDER BY rm.menu_id`,
-    [roleId],
-  );
+  const stmt = selectRoleMenuIds(roleId);
+  const rows = await dbClient.query<{ menuId: number }>(stmt.sql, stmt.params);
   return rows.map((row) => row.menuId);
 }
 
 /** 角色的自定义数据范围组织。 */
 export async function getRoleScopeOrgIds(roleId: number): Promise<number[]> {
-  const rows = await dbClient.query<{ orgId: number }>(
-    `SELECT org_id AS orgId FROM sys_role_scope_org WHERE role_id = ? ORDER BY org_id`,
-    [roleId],
-  );
+  const stmt = selectRoleScopeOrgIds(roleId);
+  const rows = await dbClient.query<{ orgId: number }>(stmt.sql, stmt.params);
   return rows.map((row) => row.orgId);
 }
 
@@ -187,24 +142,14 @@ export async function getPermissionSources(userId: number): Promise<{
   postIds: number[];
   orgMenuIds: number[];
 }> {
+  const sourcesStmt = selectRolePermissionSources(userId);
   const roles = await dbClient.query<{
     roleId: number;
     roleName: string;
     roleKey: string;
     dataScope: DataScope;
     menuIds: string | null;
-  }>(
-    `SELECT r.role_id AS roleId, r.role_name AS roleName, r.role_key AS roleKey,
-            r.data_scope AS dataScope,
-            GROUP_CONCAT(DISTINCT rm.menu_id) AS menuIds
-       FROM sys_user_role ur
-       JOIN sys_role r ON r.role_id = ur.role_id AND r.status = '0' AND r.del_flag = '0'
-       LEFT JOIN sys_role_menu rm ON rm.role_id = r.role_id
-      WHERE ur.user_id = ?
-      GROUP BY r.role_id, r.role_name, r.role_key, r.data_scope
-      ORDER BY r.role_sort`,
-    [userId],
-  );
+  }>(sourcesStmt.sql, sourcesStmt.params);
 
   const roleList = await Promise.all(
     roles.map(async (role) => ({
@@ -216,45 +161,27 @@ export async function getPermissionSources(userId: number): Promise<{
     })),
   );
 
-  const posts = await dbClient.query<{ postId: number }>(
-    `SELECT DISTINCT p.post_id AS postId
-       FROM sys_user_post up
-       JOIN sys_post p ON p.post_id = up.post_id AND p.status = '0' AND p.del_flag = '0'
-      WHERE up.user_id = ?`,
-    [userId],
-  );
+  const postStmt = selectUserPostIds(userId);
+  const posts = await dbClient.query<{ postId: number }>(postStmt.sql, postStmt.params);
   const postIds = posts.map((post) => post.postId);
 
   let postMenuIds: number[] = [];
   if (postIds.length > 0) {
-    const rows = await dbClient.query<{ menuId: number }>(
-      `SELECT DISTINCT pm.menu_id AS menuId
-         FROM sys_post_menu pm
-         JOIN sys_menu m ON m.menu_id = pm.menu_id AND m.status = '0'
-        WHERE pm.post_id IN (${placeholders(postIds.length)})`,
-      postIds,
-    );
+    const stmt = selectPostMenuIds(postIds);
+    const rows = await dbClient.query<{ menuId: number }>(stmt.sql, stmt.params);
     postMenuIds = rows.map((row) => row.menuId);
   }
 
+  const orgStmt = selectUserOrgScopeRefs(userId);
   const orgs = await dbClient.query<{ orgId: number; ancestors: string }>(
-    `SELECT DISTINCT p.org_id AS orgId, o.ancestors
-       FROM sys_user_post up
-       JOIN sys_post p ON p.post_id = up.post_id AND p.status = '0' AND p.del_flag = '0'
-       JOIN sys_org o ON o.org_id = p.org_id AND o.del_flag = '0'
-      WHERE up.user_id = ?`,
-    [userId],
+    orgStmt.sql,
+    orgStmt.params,
   );
 
   const orgMenuSet = new Set<number>();
   for (const org of orgs) {
-    const rows = await dbClient.query<{ menuId: number }>(
-      `SELECT DISTINCT om.menu_id AS menuId
-         FROM sys_org_menu om
-         JOIN sys_menu m ON m.menu_id = om.menu_id AND m.status = '0'
-        WHERE om.org_id = ? OR FIND_IN_SET(om.org_id, ?)`,
-      [org.orgId, org.ancestors],
-    );
+    const stmt = selectOrgMenuIdsForScope(org.orgId, org.ancestors);
+    const rows = await dbClient.query<{ menuId: number }>(stmt.sql, stmt.params);
     rows.forEach((row) => orgMenuSet.add(row.menuId));
   }
 

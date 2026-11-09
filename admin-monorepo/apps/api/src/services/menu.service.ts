@@ -4,39 +4,21 @@ import type {
   MenuQuery,
   MenuRow,
   MenuTreeNode,
-  Status,
   UpdateMenuInput,
 } from '@cloudhub/types';
+
 import { dbClient, executeOn } from '../db/index.js';
+import {
+  allMenus,
+  selectMenuById,
+  selectMenuChildCount,
+} from '../sql/menu.sql.js';
+import type { MenuDbRow } from '../sql/menu.sql.js';
 import { HttpError } from '../utils/http.js';
 
-interface MenuDbRow {
-  menuId: number;
-  menuName: string;
-  parentId: number;
-  orderNum: number;
-  path: string;
-  component: string | null;
-  menuType: 'M' | 'C' | 'F';
-  status: Status;
-  perms: string | null;
-  icon: string;
-  createBy: string;
-  createTime: string;
-  updateBy: string;
-  updateTime: string | null;
-}
-
-const MENU_COLUMNS = `menu_id AS menuId, menu_name AS menuName, parent_id AS parentId,
-  order_num AS orderNum, path, component, menu_type AS menuType, status, perms, icon,
-  create_by AS createBy, create_time AS createTime,
-  update_by AS updateBy, update_time AS updateTime`;
-
 async function findMenuRow(menuId: number): Promise<MenuDbRow | null> {
-  return dbClient.queryOne<MenuDbRow>(
-    `SELECT ${MENU_COLUMNS} FROM sys_menu WHERE menu_id = ? LIMIT 1`,
-    [menuId],
-  );
+  const stmt = selectMenuById(menuId);
+  return dbClient.queryOne<MenuDbRow>(stmt.sql, stmt.params);
 }
 
 async function requireMenu(menuId: number): Promise<MenuDbRow> {
@@ -52,9 +34,7 @@ function toMenu(row: MenuDbRow): Menu {
 }
 
 async function loadAllMenus(): Promise<MenuDbRow[]> {
-  return dbClient.query<MenuDbRow>(
-    `SELECT ${MENU_COLUMNS} FROM sys_menu ORDER BY order_num, menu_id`,
-  );
+  return dbClient.query<MenuDbRow>(allMenus.sql, allMenus.params);
 }
 
 function buildChildrenMap(rows: MenuDbRow[]): Map<number, MenuDbRow[]> {
@@ -230,9 +210,10 @@ export async function updateMenu(
   }
 
   if (menuType === 'F') {
+    const childStmt = selectMenuChildCount(menuId);
     const childCount = await dbClient.queryOne<{ total: number }>(
-      `SELECT COUNT(*) AS total FROM sys_menu WHERE parent_id = ?`,
-      [menuId],
+      childStmt.sql,
+      childStmt.params,
     );
     if (Number(childCount?.total ?? 0) > 0) {
       throw new HttpError(400, '该菜单下存在子节点，不能改为动作类型');
@@ -266,9 +247,10 @@ export async function updateMenu(
 export async function deleteMenu(menuId: number): Promise<void> {
   await requireMenu(menuId);
 
+  const childStmt = selectMenuChildCount(menuId);
   const childCount = await dbClient.queryOne<{ total: number }>(
-    `SELECT COUNT(*) AS total FROM sys_menu WHERE parent_id = ?`,
-    [menuId],
+    childStmt.sql,
+    childStmt.params,
   );
   if (Number(childCount?.total ?? 0) > 0) {
     throw new HttpError(400, '该菜单下存在子菜单，需先删除下级菜单');

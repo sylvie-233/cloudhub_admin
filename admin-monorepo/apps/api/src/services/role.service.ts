@@ -1,85 +1,40 @@
 import type {
   CreateRoleInput,
-  DataScope,
-  DelFlag,
   Role,
   RoleDetail,
   RoleListItem,
   RoleQuery,
   RoleUserItem,
-  Status,
   UpdateRoleInput,
 } from '@cloudhub/types';
-import { escapeLike, placeholders } from '@cloudhub/utils';
+import { placeholders } from '@cloudhub/utils';
 
 import { dbClient, executeOn } from '../db/index.js';
+import {
+  buildRoleListFilter,
+  selectRoleById,
+  selectRoleKeyConflict,
+  selectRoleMenuCount,
+  selectRoleUsers,
+  selectRoleUsersCount,
+  selectRoles,
+} from '../sql/role.sql.js';
+import type { RoleListRow, RoleRow, RoleUserRow } from '../sql/role.sql.js';
+import {
+  selectPostPermCountsByUserIds,
+  selectUserIdsByIds,
+} from '../sql/user.sql.js';
+import type { UserCountRow } from '../sql/user.sql.js';
 import { HttpError } from '../utils/http.js';
 import { loadPostsForUsers } from './user.service.js';
-
-interface RoleRow {
-  roleId: number;
-  roleName: string;
-  roleKey: string;
-  roleSort: number;
-  dataScope: DataScope;
-  status: Status;
-  delFlag: DelFlag;
-  createBy: string;
-  createTime: string;
-  updateBy: string;
-  updateTime: string | null;
-  remark: string | null;
-}
-
-interface RoleListRow extends RoleRow {
-  userCount: number;
-  menuCount: number;
-}
-
-interface RoleUserRow {
-  userId: number;
-  userName: string;
-  nickName: string;
-  email: string;
-  phonenumber: string;
-  sex: '0' | '1' | '2';
-  status: Status;
-  delFlag: DelFlag;
-  createBy: string;
-  createTime: string;
-  updateBy: string;
-  updateTime: string | null;
-}
-
-const ROLE_COLUMNS = `r.role_id AS roleId, r.role_name AS roleName, r.role_key AS roleKey,
-  r.role_sort AS roleSort, r.data_scope AS dataScope, r.status, r.del_flag AS delFlag,
-  r.create_by AS createBy, r.create_time AS createTime,
-  r.update_by AS updateBy, r.update_time AS updateTime, r.remark`;
-
-const ROLE_LIST_COLUMNS = `${ROLE_COLUMNS},
-  (SELECT COUNT(*) FROM sys_user_role ur
-     JOIN sys_user u ON u.user_id = ur.user_id AND u.del_flag = '0'
-    WHERE ur.role_id = r.role_id) AS userCount,
-  CASE WHEN r.role_id = 1
-       THEN (SELECT COUNT(*) FROM sys_menu)
-       ELSE (SELECT COUNT(*) FROM sys_role_menu rm WHERE rm.role_id = r.role_id)
-  END AS menuCount`;
-
-const USER_COLUMNS = `u.user_id AS userId, u.user_name AS userName, u.nick_name AS nickName,
-  u.email, u.phonenumber, u.sex, u.status, u.del_flag AS delFlag,
-  u.create_by AS createBy, u.create_time AS createTime,
-  u.update_by AS updateBy, u.update_time AS updateTime`;
 
 function toRole(row: RoleRow): Role {
   return { ...row };
 }
 
 async function findRoleRow(roleId: number): Promise<RoleRow | null> {
-  return dbClient.queryOne<RoleRow>(
-    `SELECT ${ROLE_COLUMNS} FROM sys_role r
-      WHERE r.role_id = ? AND r.del_flag = '0' LIMIT 1`,
-    [roleId],
-  );
+  const stmt = selectRoleById(roleId);
+  return dbClient.queryOne<RoleRow>(stmt.sql, stmt.params);
 }
 
 async function requireRole(roleId: number): Promise<RoleRow> {
@@ -92,25 +47,8 @@ async function requireRole(roleId: number): Promise<RoleRow> {
 
 /** 角色列表（原型为平铺列表，不分页）。 */
 export async function listRoles(query: RoleQuery): Promise<RoleListItem[]> {
-  const conditions = [`r.del_flag = '0'`];
-  const params: unknown[] = [];
-
-  if (query.keyword) {
-    conditions.push('(r.role_name LIKE ? OR r.role_key LIKE ?)');
-    const pattern = `%${escapeLike(query.keyword)}%`;
-    params.push(pattern, pattern);
-  }
-  if (query.status) {
-    conditions.push('r.status = ?');
-    params.push(query.status);
-  }
-
-  const rows = await dbClient.query<RoleListRow>(
-    `SELECT ${ROLE_LIST_COLUMNS} FROM sys_role r
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY r.role_sort, r.role_id`,
-    params,
-  );
+  const stmt = selectRoles(buildRoleListFilter(query));
+  const rows = await dbClient.query<RoleListRow>(stmt.sql, stmt.params);
 
   return rows.map((row) => ({
     ...toRole(row),
@@ -120,31 +58,18 @@ export async function listRoles(query: RoleQuery): Promise<RoleListItem[]> {
 }
 
 async function loadRoleUsers(roleId: number): Promise<RoleUserItem[]> {
-  const rows = await dbClient.query<RoleUserRow>(
-    `SELECT ${USER_COLUMNS}
-       FROM sys_user u
-       JOIN sys_user_role ur ON ur.user_id = u.user_id
-      WHERE ur.role_id = ? AND u.del_flag = '0'
-      ORDER BY u.user_id`,
-    [roleId],
-  );
+  const userStmt = selectRoleUsers(roleId);
+  const rows = await dbClient.query<RoleUserRow>(userStmt.sql, userStmt.params);
 
   if (rows.length === 0) {
     return [];
   }
 
   const userIds = rows.map((row) => row.userId);
+  const countStmt = selectPostPermCountsByUserIds(userIds);
   const [postsMap, countRows] = await Promise.all([
     loadPostsForUsers(userIds),
-    dbClient.query<{ userId: number; total: number }>(
-      `SELECT up.user_id AS userId, COUNT(DISTINCT pm.menu_id) AS total
-         FROM sys_user_post up
-         JOIN sys_post p ON p.post_id = up.post_id AND p.del_flag = '0'
-         JOIN sys_post_menu pm ON pm.post_id = up.post_id
-        WHERE up.user_id IN (${placeholders(userIds.length)})
-        GROUP BY up.user_id`,
-      userIds,
-    ),
+    dbClient.query<UserCountRow>(countStmt.sql, countStmt.params),
   ]);
   const countMap = new Map(countRows.map((row) => [row.userId, Number(row.total)]));
 
@@ -158,14 +83,10 @@ async function loadRoleUsers(roleId: number): Promise<RoleUserItem[]> {
 /** 角色详情（含角色下用户）。 */
 export async function getRoleDetail(roleId: number): Promise<RoleDetail> {
   const role = await requireRole(roleId);
+  const menuCountStmt = selectRoleMenuCount(roleId);
   const [users, countRow] = await Promise.all([
     loadRoleUsers(roleId),
-    dbClient.queryOne<{ menuCount: number }>(
-      roleId === 1
-        ? `SELECT COUNT(*) AS menuCount FROM sys_menu`
-        : `SELECT COUNT(*) AS menuCount FROM sys_role_menu WHERE role_id = ?`,
-      roleId === 1 ? [] : [roleId],
-    ),
+    dbClient.queryOne<{ menuCount: number }>(menuCountStmt.sql, menuCountStmt.params),
   ]);
 
   return {
@@ -181,9 +102,10 @@ export async function createRole(
   input: CreateRoleInput,
   operator: string,
 ): Promise<RoleDetail> {
+  const dupStmt = selectRoleKeyConflict(input.roleKey);
   const duplicated = await dbClient.queryOne<{ roleId: number }>(
-    `SELECT role_id AS roleId FROM sys_role WHERE role_key = ? LIMIT 1`,
-    [input.roleKey],
+    dupStmt.sql,
+    dupStmt.params,
   );
   if (duplicated) {
     throw new HttpError(409, '权限字符已存在');
@@ -226,9 +148,10 @@ export async function updateRole(
 
   const roleKey = input.roleKey ?? current.roleKey;
   if (roleKey !== current.roleKey) {
+    const dupStmt = selectRoleKeyConflict(roleKey, roleId);
     const duplicated = await dbClient.queryOne<{ roleId: number }>(
-      `SELECT role_id AS roleId FROM sys_role WHERE role_key = ? AND role_id <> ? LIMIT 1`,
-      [roleKey, roleId],
+      dupStmt.sql,
+      dupStmt.params,
     );
     if (duplicated) {
       throw new HttpError(409, '权限字符已存在');
@@ -263,12 +186,10 @@ export async function deleteRole(roleId: number, operator: string): Promise<void
     throw new HttpError(400, '超级管理员角色不可删除');
   }
 
+  const countStmt = selectRoleUsersCount(roleId);
   const count = await dbClient.queryOne<{ total: number }>(
-    `SELECT COUNT(*) AS total
-       FROM sys_user_role ur
-       JOIN sys_user u ON u.user_id = ur.user_id AND u.del_flag = '0'
-      WHERE ur.role_id = ?`,
-    [roleId],
+    countStmt.sql,
+    countStmt.params,
   );
   if (Number(count?.total ?? 0) > 0) {
     throw new HttpError(400, `该角色下还有 ${Number(count?.total)} 名用户，请先移除后再删除`);
@@ -306,11 +227,8 @@ export async function assignRoleUsers(
   }
 
   if (unique.length > 0) {
-    const rows = await dbClient.query<{ userId: number }>(
-      `SELECT user_id AS userId FROM sys_user
-        WHERE del_flag = '0' AND user_id IN (${placeholders(unique.length)})`,
-      unique,
-    );
+    const stmt = selectUserIdsByIds(unique);
+    const rows = await dbClient.query<{ userId: number }>(stmt.sql, stmt.params);
     if (rows.length !== unique.length) {
       throw new HttpError(400, '存在无效的用户，请刷新后重试');
     }

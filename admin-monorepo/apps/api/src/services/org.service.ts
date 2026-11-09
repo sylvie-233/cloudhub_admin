@@ -1,6 +1,5 @@
 import type {
   CreateOrgInput,
-  DelFlag,
   LoginPost,
   Org,
   OrgDetail,
@@ -8,75 +7,40 @@ import type {
   OrgTreeNode,
   OrgUserItem,
   PageResult,
-  Status,
   UpdateOrgInput,
 } from '@cloudhub/types';
 
-import { escapeLike, normalizePagination, paginate, placeholders } from '@cloudhub/utils';
+import { normalizePagination, paginate } from '@cloudhub/utils';
 
 import { dbClient, executeOn } from '../db/index.js';
+import {
+  buildOrgTreeFilter,
+  buildOrgUserFilter,
+  countOrgUsers,
+  orgPathRows,
+  orgPostCounts,
+  selectOrgById,
+  selectOrgChildCount,
+  selectOrgCodeConflict,
+  selectOrgDescendantIds,
+  selectOrgHeadcount,
+  selectOrgLeaderPost,
+  selectOrgMaxDescendantLevel,
+  selectOrgPostCount,
+  selectOrgPosts,
+  selectOrgTree,
+  selectOrgUsersPage,
+} from '../sql/org.sql.js';
+import type { OrgPathRow, OrgPostCountRow, OrgRow } from '../sql/org.sql.js';
+import { selectPostsByUserIds } from '../sql/user.sql.js';
+import type { UserPostRow, UserRow } from '../sql/user.sql.js';
 import { generateBizCode } from '../utils/code.js';
 import { HttpError } from '../utils/http.js';
 import { resolveDataScope } from './permission.service.js';
 
-interface OrgRow {
-  orgId: number;
-  parentId: number;
-  ancestors: string;
-  orgCode: string;
-  orgName: string;
-  orgLevel: number;
-  orderNum: number;
-  leaderPostId: number | null;
-  status: Status;
-  delFlag: DelFlag;
-  createBy: string;
-  createTime: string;
-  updateBy: string;
-  updateTime: string | null;
-}
-
-interface OrgUserRow {
-  userId: number;
-  userName: string;
-  nickName: string;
-  email: string;
-  phonenumber: string;
-  sex: '0' | '1' | '2';
-  status: Status;
-  delFlag: DelFlag;
-  createBy: string;
-  createTime: string;
-  updateBy: string;
-  updateTime: string | null;
-}
-
-interface UserPostRow {
-  userId: number;
-  postId: number;
-  postName: string;
-  orgId: number;
-  orgName: string;
-  ancestors: string;
-  leaderPostId: number | null;
-  postSort: number;
-}
-
-const ORG_COLUMNS = `org_id AS orgId, parent_id AS parentId, ancestors, org_code AS orgCode,
-  org_name AS orgName, org_level AS orgLevel, order_num AS orderNum, leader_post_id AS leaderPostId,
-  status, del_flag AS delFlag, create_by AS createBy, create_time AS createTime,
-  update_by AS updateBy, update_time AS updateTime`;
-
-const USER_COLUMNS = `u.user_id AS userId, u.user_name AS userName, u.nick_name AS nickName,
-  u.email, u.phonenumber, u.sex, u.status, u.del_flag AS delFlag,
-  u.create_by AS createBy, u.create_time AS createTime,
-  u.update_by AS updateBy, u.update_time AS updateTime`;
-
 async function findOrgRow(orgId: number): Promise<OrgRow | null> {
-  return dbClient.queryOne<OrgRow>(
-    `SELECT ${ORG_COLUMNS} FROM sys_org WHERE org_id = ? AND del_flag = '0' LIMIT 1`,
-    [orgId],
-  );
+  const stmt = selectOrgById(orgId);
+  return dbClient.queryOne<OrgRow>(stmt.sql, stmt.params);
 }
 
 async function requireOrg(orgId: number): Promise<OrgRow> {
@@ -93,10 +57,7 @@ function toOrg(row: OrgRow): Org {
 
 /** 组织全路径（含自身），如「云枢科技集团 / 深圳总部 / 研发中心」。 */
 export async function getOrgPathMap(): Promise<Map<number, string>> {
-  const rows = await dbClient.query<{ orgId: number; orgName: string; parentId: number }>(
-    `SELECT org_id AS orgId, org_name AS orgName, parent_id AS parentId
-       FROM sys_org WHERE del_flag = '0'`,
-  );
+  const rows = await dbClient.query<OrgPathRow>(orgPathRows.sql, orgPathRows.params);
   const byId = new Map(rows.map((row) => [row.orgId, row]));
   const cache = new Map<number, string>();
 
@@ -129,13 +90,8 @@ export async function getOrgPathMap(): Promise<Map<number, string>> {
 
 /** 组织自身 + 所有下级组织。 */
 export async function getOrgDescendantIds(orgId: number): Promise<number[]> {
-  const rows = await dbClient.query<{ orgId: number }>(
-    `SELECT org_id AS orgId
-       FROM sys_org
-      WHERE del_flag = '0' AND (org_id = ? OR FIND_IN_SET(?, ancestors))
-      ORDER BY org_level, order_num, org_id`,
-    [orgId, orgId],
-  );
+  const stmt = selectOrgDescendantIds(orgId);
+  const rows = await dbClient.query<{ orgId: number }>(stmt.sql, stmt.params);
   return rows.map((row) => row.orgId);
 }
 
@@ -153,31 +109,13 @@ export async function getOrgAncestorIds(orgId: number): Promise<number[]> {
 
 /** 组织树。 */
 export async function listOrgTree(query: OrgQuery): Promise<OrgTreeNode[]> {
-  const conditions = [`del_flag = '0'`];
-  const params: unknown[] = [];
+  const filter = buildOrgTreeFilter(query);
+  const treeStmt = selectOrgTree(filter);
+  const rows = await dbClient.query<OrgRow>(treeStmt.sql, treeStmt.params);
 
-  if (query.status) {
-    conditions.push('status = ?');
-    params.push(query.status);
-  }
-  if (query.keyword) {
-    conditions.push('(org_name LIKE ? OR org_code LIKE ?)');
-    const pattern = `%${escapeLike(query.keyword)}%`;
-    params.push(pattern, pattern);
-  }
-
-  const rows = await dbClient.query<OrgRow>(
-    `SELECT ${ORG_COLUMNS} FROM sys_org
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY order_num, org_id`,
-    params,
-  );
-
-  const counts = await dbClient.query<{ orgId: number; postCount: number }>(
-    `SELECT org_id AS orgId, COUNT(*) AS postCount
-       FROM sys_post
-      WHERE del_flag = '0' AND status = '0'
-      GROUP BY org_id`,
+  const counts = await dbClient.query<OrgPostCountRow>(
+    orgPostCounts.sql,
+    orgPostCounts.params,
   );
   const countMap = new Map(counts.map((row) => [row.orgId, Number(row.postCount)]));
 
@@ -213,24 +151,16 @@ export async function listOrgTree(query: OrgQuery): Promise<OrgTreeNode[]> {
 export async function getOrgDetail(orgId: number): Promise<OrgDetail> {
   const org = await requireOrg(orgId);
 
+  const postStmt = selectOrgPosts(orgId);
   const posts = await dbClient.query<OrgDetail['posts'][number]>(
-    `SELECT post_id AS postId, org_id AS orgId, parent_id AS parentId, post_code AS postCode,
-            post_name AS postName, post_sort AS postSort, status, del_flag AS delFlag,
-            create_by AS createBy, create_time AS createTime,
-            update_by AS updateBy, update_time AS updateTime
-       FROM sys_post
-      WHERE org_id = ? AND del_flag = '0'
-      ORDER BY post_sort, post_id`,
-    [orgId],
+    postStmt.sql,
+    postStmt.params,
   );
 
+  const countStmt = selectOrgHeadcount(orgId);
   const count = await dbClient.queryOne<{ headcount: number }>(
-    `SELECT COUNT(DISTINCT u.user_id) AS headcount
-       FROM sys_post p
-       JOIN sys_user_post up ON up.post_id = p.post_id
-       JOIN sys_user u ON u.user_id = up.user_id AND u.del_flag = '0' AND u.status = '0'
-      WHERE p.org_id = ? AND p.del_flag = '0' AND p.status = '0'`,
-    [orgId],
+    countStmt.sql,
+    countStmt.params,
   );
 
   return { ...toOrg(org), posts, headcount: Number(count?.headcount ?? 0) };
@@ -250,9 +180,10 @@ export async function createOrg(input: CreateOrgInput, operator: string): Promis
   const ancestors = parent ? `${parent.ancestors},${parent.orgId}` : '0';
 
   const orgCode = input.orgCode?.trim() || (await generateBizCode('org'));
+  const dupStmt = selectOrgCodeConflict(orgCode);
   const duplicated = await dbClient.queryOne<{ orgId: number }>(
-    `SELECT org_id AS orgId FROM sys_org WHERE org_code = ? LIMIT 1`,
-    [orgCode],
+    dupStmt.sql,
+    dupStmt.params,
   );
   if (duplicated) {
     throw new HttpError(409, '组织编码已存在');
@@ -330,11 +261,10 @@ export async function updateOrg(
   const ancestors = parent ? `${parent.ancestors},${parent.orgId}` : '0';
 
   // 移动后子树最深节点也不能超过 9 级
+  const maxStmt = selectOrgMaxDescendantLevel(orgId);
   const maxRow = await dbClient.queryOne<{ maxLevel: number | null }>(
-    `SELECT MAX(org_level) AS maxLevel
-       FROM sys_org
-      WHERE del_flag = '0' AND FIND_IN_SET(?, ancestors)`,
-    [orgId],
+    maxStmt.sql,
+    maxStmt.params,
   );
   const maxLevel = Number(maxRow?.maxLevel ?? current.orgLevel);
   if (maxLevel + (orgLevel - current.orgLevel) > 9) {
@@ -343,9 +273,10 @@ export async function updateOrg(
 
   const orgCode = input.orgCode ?? current.orgCode;
   if (orgCode !== current.orgCode) {
+    const dupStmt = selectOrgCodeConflict(orgCode, orgId);
     const duplicated = await dbClient.queryOne<{ orgId: number }>(
-      `SELECT org_id AS orgId FROM sys_org WHERE org_code = ? AND org_id <> ? LIMIT 1`,
-      [orgCode, orgId],
+      dupStmt.sql,
+      dupStmt.params,
     );
     if (duplicated) {
       throw new HttpError(409, '组织编码已存在');
@@ -403,17 +334,19 @@ export async function updateOrg(
 export async function deleteOrg(orgId: number, operator: string): Promise<void> {
   await requireOrg(orgId);
 
+  const childStmt = selectOrgChildCount(orgId);
   const childCount = await dbClient.queryOne<{ total: number }>(
-    `SELECT COUNT(*) AS total FROM sys_org WHERE parent_id = ? AND del_flag = '0'`,
-    [orgId],
+    childStmt.sql,
+    childStmt.params,
   );
   if (Number(childCount?.total ?? 0) > 0) {
     throw new HttpError(400, '该组织下存在子组织，需先清理后再删除');
   }
 
+  const postStmt = selectOrgPostCount(orgId);
   const postCount = await dbClient.queryOne<{ total: number }>(
-    `SELECT COUNT(*) AS total FROM sys_post WHERE org_id = ? AND del_flag = '0'`,
-    [orgId],
+    postStmt.sql,
+    postStmt.params,
   );
   if (Number(postCount?.total ?? 0) > 0) {
     throw new HttpError(400, '该组织下存在岗位，需先清理后再删除');
@@ -438,11 +371,12 @@ export async function setOrgLeader(
   await requireOrg(orgId);
 
   if (postId !== null) {
-    const post = await dbClient.queryOne<{ postId: number; orgId: number; delFlag: string }>(
-      `SELECT post_id AS postId, org_id AS orgId, del_flag AS delFlag
-         FROM sys_post WHERE post_id = ? LIMIT 1`,
-      [postId],
-    );
+    const stmt = selectOrgLeaderPost(postId);
+    const post = await dbClient.queryOne<{
+      postId: number;
+      orgId: number;
+      delFlag: string;
+    }>(stmt.sql, stmt.params);
     if (!post || post.delFlag === '2') {
       throw new HttpError(404, '岗位不存在或已被删除');
     }
@@ -490,51 +424,27 @@ export async function listOrgUsers(
     }
   }
 
-  const conditions = [
-    `u.del_flag = '0'`,
-    `p.del_flag = '0'`,
-    `p.org_id IN (${placeholders(scopedOrgIds.length)})`,
-  ];
-  const params: unknown[] = [...scopedOrgIds];
-
-  if (query.postId) {
-    conditions.push('up.post_id = ?');
-    params.push(query.postId);
-  }
-  if (query.keyword) {
-    conditions.push('(u.user_name LIKE ? OR u.nick_name LIKE ? OR u.phonenumber LIKE ?)');
-    const pattern = `%${escapeLike(query.keyword)}%`;
-    params.push(pattern, pattern, pattern);
-  }
-  if (scope.mode === 'self') {
-    conditions.push('u.user_id = ?');
-    params.push(currentUserId);
-  }
-
-  const fromSql = `FROM sys_user u
-    JOIN sys_user_post up ON up.user_id = u.user_id
-    JOIN sys_post p ON p.post_id = up.post_id
-   WHERE ${conditions.join(' AND ')}`;
-
   const { page, pageSize, offset } = normalizePagination(query, 20);
 
+  const filter = buildOrgUserFilter({
+    orgIds: scopedOrgIds,
+    postId: query.postId,
+    keyword: query.keyword,
+    scopeMode: scope.mode,
+    currentUserId,
+  });
+
+  const countStmt = countOrgUsers(filter);
   const countRow = await dbClient.queryOne<{ total: number }>(
-    `SELECT COUNT(DISTINCT u.user_id) AS total ${fromSql}`,
-    params,
+    countStmt.sql,
+    countStmt.params,
   );
   const total = Number(countRow?.total ?? 0);
 
-  const rows = await dbClient.query<OrgUserRow>(
-    `SELECT DISTINCT ${USER_COLUMNS} ${fromSql}
-      ORDER BY u.user_id
-      LIMIT ? OFFSET ?`,
-    [...params, pageSize, offset],
-  );
+  const pageStmt = selectOrgUsersPage(filter, pageSize, offset);
+  const rows = await dbClient.query<UserRow>(pageStmt.sql, pageStmt.params);
 
-  const postsMap = await loadPostsForUsers(
-    rows.map((row) => row.userId),
-    scopedOrgIds,
-  );
+  const postsMap = await loadPostsForUsers(rows.map((row) => row.userId), scopedOrgIds);
 
   const list: OrgUserItem[] = rows.map((row) => ({
     ...row,
@@ -553,18 +463,8 @@ async function loadPostsForUsers(
     return result;
   }
 
-  const rows = await dbClient.query<UserPostRow>(
-    `SELECT up.user_id AS userId, p.post_id AS postId, p.post_name AS postName,
-            p.org_id AS orgId, o.org_name AS orgName, o.ancestors,
-            o.leader_post_id AS leaderPostId, p.post_sort AS postSort
-       FROM sys_user_post up
-       JOIN sys_post p ON p.post_id = up.post_id AND p.del_flag = '0'
-       JOIN sys_org o ON o.org_id = p.org_id AND o.del_flag = '0'
-      WHERE up.user_id IN (${placeholders(userIds.length)})
-        AND p.org_id IN (${placeholders(orgIds.length)})
-      ORDER BY p.post_sort, p.post_id`,
-    [...userIds, ...orgIds],
-  );
+  const stmt = selectPostsByUserIds(userIds, orgIds);
+  const rows = await dbClient.query<UserPostRow>(stmt.sql, stmt.params);
 
   const pathMap = await getOrgPathMap();
 

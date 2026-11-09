@@ -1,51 +1,30 @@
 import type {
   CreatePostInput,
-  DelFlag,
   PostDetail,
   PostTreeNode,
-  Status,
   UpdatePostInput,
 } from '@cloudhub/types';
-import { placeholders } from '@cloudhub/utils';
 
 import { dbClient, executeOn } from '../db/index.js';
+import {
+  postParents,
+  selectOrgRefById,
+  selectPostById,
+  selectPostCodeConflict,
+  selectPostHeadcount,
+  selectPostHeadcountsByOrg,
+  selectPostHeadcountsByIds,
+  selectPostUsersCount,
+  selectPostsByOrg,
+} from '../sql/post.sql.js';
+import type { OrgRefRow, PostRow } from '../sql/post.sql.js';
 import { generateBizCode } from '../utils/code.js';
 import { HttpError } from '../utils/http.js';
 import { getOrgPathMap } from './org.service.js';
 
-interface PostRow {
-  postId: number;
-  orgId: number;
-  parentId: number;
-  postCode: string;
-  postName: string;
-  postSort: number;
-  status: Status;
-  delFlag: DelFlag;
-  createBy: string;
-  createTime: string;
-  updateBy: string;
-  updateTime: string | null;
-}
-
-interface OrgRow {
-  orgId: number;
-  orgName: string;
-  ancestors: string;
-  leaderPostId: number | null;
-  delFlag: DelFlag;
-}
-
-const POST_COLUMNS = `post_id AS postId, org_id AS orgId, parent_id AS parentId,
-  post_code AS postCode, post_name AS postName, post_sort AS postSort,
-  status, del_flag AS delFlag, create_by AS createBy, create_time AS createTime,
-  update_by AS updateBy, update_time AS updateTime`;
-
 async function findPostRow(postId: number): Promise<PostRow | null> {
-  return dbClient.queryOne<PostRow>(
-    `SELECT ${POST_COLUMNS} FROM sys_post WHERE post_id = ? AND del_flag = '0' LIMIT 1`,
-    [postId],
-  );
+  const stmt = selectPostById(postId);
+  return dbClient.queryOne<PostRow>(stmt.sql, stmt.params);
 }
 
 async function requirePost(postId: number): Promise<PostRow> {
@@ -56,13 +35,9 @@ async function requirePost(postId: number): Promise<PostRow> {
   return post;
 }
 
-async function requireOrg(orgId: number): Promise<OrgRow> {
-  const org = await dbClient.queryOne<OrgRow>(
-    `SELECT org_id AS orgId, org_name AS orgName, ancestors, leader_post_id AS leaderPostId,
-            del_flag AS delFlag
-       FROM sys_org WHERE org_id = ? AND del_flag = '0' LIMIT 1`,
-    [orgId],
-  );
+async function requireOrg(orgId: number): Promise<OrgRefRow> {
+  const stmt = selectOrgRefById(orgId);
+  const org = await dbClient.queryOne<OrgRefRow>(stmt.sql, stmt.params);
   if (!org) {
     throw new HttpError(404, '组织不存在或已被删除');
   }
@@ -73,20 +48,13 @@ async function requireOrg(orgId: number): Promise<OrgRow> {
 export async function listPostsByOrg(orgId: number): Promise<PostTreeNode[]> {
   const org = await requireOrg(orgId);
 
-  const rows = await dbClient.query<PostRow>(
-    `SELECT ${POST_COLUMNS} FROM sys_post
-      WHERE org_id = ? AND del_flag = '0'
-      ORDER BY post_sort, post_id`,
-    [orgId],
-  );
+  const postStmt = selectPostsByOrg(orgId);
+  const rows = await dbClient.query<PostRow>(postStmt.sql, postStmt.params);
 
+  const countStmt = selectPostHeadcountsByOrg(orgId);
   const counts = await dbClient.query<{ postId: number; headcount: number }>(
-    `SELECT up.post_id AS postId, COUNT(DISTINCT u.user_id) AS headcount
-       FROM sys_user_post up
-       JOIN sys_user u ON u.user_id = up.user_id AND u.del_flag = '0' AND u.status = '0'
-      WHERE up.post_id IN (SELECT post_id FROM sys_post WHERE org_id = ? AND del_flag = '0')
-      GROUP BY up.post_id`,
-    [orgId],
+    countStmt.sql,
+    countStmt.params,
   );
   const countMap = new Map(counts.map((row) => [row.postId, Number(row.headcount)]));
 
@@ -132,12 +100,10 @@ export async function getPostDetail(postId: number): Promise<PostDetail> {
   const org = await requireOrg(post.orgId);
   const pathMap = await getOrgPathMap();
 
+  const countStmt = selectPostHeadcount(postId);
   const count = await dbClient.queryOne<{ headcount: number }>(
-    `SELECT COUNT(DISTINCT u.user_id) AS headcount
-       FROM sys_user_post up
-       JOIN sys_user u ON u.user_id = up.user_id AND u.del_flag = '0' AND u.status = '0'
-      WHERE up.post_id = ?`,
-    [postId],
+    countStmt.sql,
+    countStmt.params,
   );
 
   const ancestorIds = org.ancestors
@@ -171,9 +137,10 @@ export async function createPost(
   }
 
   const postCode = input.postCode?.trim() || (await generateBizCode('post'));
+  const dupStmt = selectPostCodeConflict(postCode);
   const duplicated = await dbClient.queryOne<{ postId: number }>(
-    `SELECT post_id AS postId FROM sys_post WHERE post_code = ? LIMIT 1`,
-    [postCode],
+    dupStmt.sql,
+    dupStmt.params,
   );
   if (duplicated) {
     throw new HttpError(409, '岗位编码已存在');
@@ -231,7 +198,8 @@ export async function updatePost(
       throw new HttpError(400, '上级岗位不存在或已被删除');
     }
     const allPosts = await dbClient.query<{ postId: number; parentId: number }>(
-      `SELECT post_id AS postId, parent_id AS parentId FROM sys_post WHERE del_flag = '0'`,
+      postParents.sql,
+      postParents.params,
     );
     const parentMap = new Map(allPosts.map((post) => [post.postId, post.parentId]));
     let cursor: number | undefined = parentId;
@@ -250,9 +218,10 @@ export async function updatePost(
 
   const postCode = input.postCode ?? current.postCode;
   if (postCode !== current.postCode) {
+    const dupStmt = selectPostCodeConflict(postCode, postId);
     const duplicated = await dbClient.queryOne<{ postId: number }>(
-      `SELECT post_id AS postId FROM sys_post WHERE post_code = ? AND post_id <> ? LIMIT 1`,
-      [postCode, postId],
+      dupStmt.sql,
+      dupStmt.params,
     );
     if (duplicated) {
       throw new HttpError(409, '岗位编码已存在');
@@ -306,12 +275,10 @@ export async function updatePost(
 export async function deletePost(postId: number, operator: string): Promise<void> {
   await requirePost(postId);
 
+  const countStmt = selectPostUsersCount(postId);
   const count = await dbClient.queryOne<{ total: number }>(
-    `SELECT COUNT(*) AS total
-       FROM sys_user_post up
-       JOIN sys_user u ON u.user_id = up.user_id AND u.del_flag = '0'
-      WHERE up.post_id = ?`,
-    [postId],
+    countStmt.sql,
+    countStmt.params,
   );
   if (Number(count?.total ?? 0) > 0) {
     throw new HttpError(400, `该岗位仍有 ${Number(count?.total)} 人在岗，需先调岗后再删除`);
@@ -340,13 +307,10 @@ export async function countPostsHeadcount(postIds: number[]): Promise<Map<number
   if (postIds.length === 0) {
     return new Map();
   }
+  const stmt = selectPostHeadcountsByIds(postIds);
   const rows = await dbClient.query<{ postId: number; headcount: number }>(
-    `SELECT up.post_id AS postId, COUNT(DISTINCT u.user_id) AS headcount
-       FROM sys_user_post up
-       JOIN sys_user u ON u.user_id = up.user_id AND u.del_flag = '0' AND u.status = '0'
-      WHERE up.post_id IN (${placeholders(postIds.length)})
-      GROUP BY up.post_id`,
-    postIds,
+    stmt.sql,
+    stmt.params,
   );
   return new Map(rows.map((row) => [row.postId, Number(row.headcount)]));
 }

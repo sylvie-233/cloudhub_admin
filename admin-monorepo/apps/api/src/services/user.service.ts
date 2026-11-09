@@ -1,13 +1,9 @@
 import type {
   CreateUserInput,
-  DataScope,
-  DelFlag,
   LoginPost,
   LoginRole,
   PageResult,
   PermissionSource,
-  Sex,
-  Status,
   UpdateUserInput,
   User,
   UserListItem,
@@ -15,11 +11,33 @@ import type {
   UserQuery,
 } from '@cloudhub/types';
 import { DATA_SCOPE_LABELS } from '@cloudhub/types';
-import { escapeLike, normalizePagination, paginate, placeholders } from '@cloudhub/utils';
+import { normalizePagination, paginate, placeholders } from '@cloudhub/utils';
 
 import { dbClient, executeOn } from '../db/index.js';
-import { DEFAULT_PASSWORD, hashPassword } from '../utils/password.js';
+import {
+  buildUserListFilter,
+  countUsers,
+  selectOrgPermCountsByUserIds,
+  selectPostIdsByIds,
+  selectPostNamesByIds,
+  selectPostPermCountsByUserIds,
+  selectPostsByUserIds,
+  selectRoleIdsByIds,
+  selectRolesByUserIds,
+  selectUserIdByName,
+  selectUserById,
+  selectUserForLogin,
+  selectUsersPage,
+} from '../sql/user.sql.js';
+import type {
+  UserCountRow,
+  UserLoginRow,
+  UserPostRow,
+  UserRow,
+  UserRoleRow,
+} from '../sql/user.sql.js';
 import { HttpError } from '../utils/http.js';
+import { DEFAULT_PASSWORD, hashPassword } from '../utils/password.js';
 import { getOrgDescendantIds, getOrgPathMap } from './org.service.js';
 import {
   getPermissionSources,
@@ -27,58 +45,9 @@ import {
   resolveDataScope,
 } from './permission.service.js';
 
-interface UserRow {
-  userId: number;
-  userName: string;
-  nickName: string;
-  email: string;
-  phonenumber: string;
-  sex: Sex;
-  status: Status;
-  delFlag: DelFlag;
-  createBy: string;
-  createTime: string;
-  updateBy: string;
-  updateTime: string | null;
-}
-
-interface UserLoginRow {
-  userId: number;
-  userName: string;
-  password: string;
-  status: Status;
-  delFlag: DelFlag;
-}
-
-interface UserPostRow {
-  userId: number;
-  postId: number;
-  postName: string;
-  orgId: number;
-  orgName: string;
-  ancestors: string;
-  leaderPostId: number | null;
-  postSort: number;
-}
-
-interface UserRoleRow {
-  userId: number;
-  roleId: number;
-  roleName: string;
-  roleKey: string;
-  dataScope: DataScope;
-}
-
-const USER_COLUMNS = `u.user_id AS userId, u.user_name AS userName, u.nick_name AS nickName,
-  u.email, u.phonenumber, u.sex, u.status, u.del_flag AS delFlag,
-  u.create_by AS createBy, u.create_time AS createTime,
-  u.update_by AS updateBy, u.update_time AS updateTime`;
-
 async function findUserRow(userId: number): Promise<UserRow | null> {
-  return dbClient.queryOne<UserRow>(
-    `SELECT ${USER_COLUMNS} FROM sys_user u WHERE u.user_id = ? AND u.del_flag = '0' LIMIT 1`,
-    [userId],
-  );
+  const stmt = selectUserById(userId);
+  return dbClient.queryOne<UserRow>(stmt.sql, stmt.params);
 }
 
 async function requireUser(userId: number): Promise<UserRow> {
@@ -91,11 +60,8 @@ async function requireUser(userId: number): Promise<UserRow> {
 
 /** 登录时按账号读取完整行（含密码哈希），仅供认证模块使用。 */
 export async function findUserForLogin(userName: string): Promise<UserLoginRow | null> {
-  return dbClient.queryOne<UserLoginRow>(
-    `SELECT user_id AS userId, user_name AS userName, password, status, del_flag AS delFlag
-       FROM sys_user WHERE user_name = ? LIMIT 1`,
-    [userName],
-  );
+  const stmt = selectUserForLogin(userName);
+  return dbClient.queryOne<UserLoginRow>(stmt.sql, stmt.params);
 }
 
 /** 校验岗位 ID 均存在且未删除。 */
@@ -104,11 +70,8 @@ async function assertPostsExist(postIds: number[]): Promise<void> {
   if (unique.length === 0) {
     throw new HttpError(400, '请至少选择一个任职岗位');
   }
-  const rows = await dbClient.query<{ postId: number }>(
-    `SELECT post_id AS postId FROM sys_post
-      WHERE del_flag = '0' AND post_id IN (${placeholders(unique.length)})`,
-    unique,
-  );
+  const stmt = selectPostIdsByIds(unique);
+  const rows = await dbClient.query<{ postId: number }>(stmt.sql, stmt.params);
   if (rows.length !== unique.length) {
     throw new HttpError(400, '存在无效的岗位，请刷新后重试');
   }
@@ -120,11 +83,8 @@ async function assertRolesExist(roleIds: number[]): Promise<void> {
   if (unique.length === 0) {
     return;
   }
-  const rows = await dbClient.query<{ roleId: number }>(
-    `SELECT role_id AS roleId FROM sys_role
-      WHERE del_flag = '0' AND role_id IN (${placeholders(unique.length)})`,
-    unique,
-  );
+  const stmt = selectRoleIdsByIds(unique);
+  const rows = await dbClient.query<{ roleId: number }>(stmt.sql, stmt.params);
   if (rows.length !== unique.length) {
     throw new HttpError(400, '存在无效的角色，请刷新后重试');
   }
@@ -139,17 +99,8 @@ export async function loadPostsForUsers(
     return result;
   }
 
-  const rows = await dbClient.query<UserPostRow>(
-    `SELECT up.user_id AS userId, p.post_id AS postId, p.post_name AS postName,
-            p.org_id AS orgId, o.org_name AS orgName, o.ancestors,
-            o.leader_post_id AS leaderPostId, p.post_sort AS postSort
-       FROM sys_user_post up
-       JOIN sys_post p ON p.post_id = up.post_id AND p.del_flag = '0'
-       JOIN sys_org o ON o.org_id = p.org_id AND o.del_flag = '0'
-      WHERE up.user_id IN (${placeholders(userIds.length)})
-      ORDER BY p.post_sort, p.post_id`,
-    userIds,
-  );
+  const stmt = selectPostsByUserIds(userIds);
+  const rows = await dbClient.query<UserPostRow>(stmt.sql, stmt.params);
 
   const pathMap = await getOrgPathMap();
 
@@ -175,15 +126,8 @@ export async function loadRolesForUsers(userIds: number[]): Promise<Map<number, 
     return result;
   }
 
-  const rows = await dbClient.query<UserRoleRow>(
-    `SELECT ur.user_id AS userId, r.role_id AS roleId, r.role_name AS roleName,
-            r.role_key AS roleKey, r.data_scope AS dataScope
-       FROM sys_user_role ur
-       JOIN sys_role r ON r.role_id = ur.role_id AND r.del_flag = '0'
-      WHERE ur.user_id IN (${placeholders(userIds.length)})
-      ORDER BY r.role_sort, r.role_id`,
-    userIds,
-  );
+  const stmt = selectRolesByUserIds(userIds);
+  const rows = await dbClient.query<UserRoleRow>(stmt.sql, stmt.params);
 
   for (const row of rows) {
     const list = result.get(row.userId) ?? [];
@@ -208,27 +152,12 @@ async function loadPermCounts(
     return { post, org };
   }
 
-  const postRows = await dbClient.query<{ userId: number; total: number }>(
-    `SELECT up.user_id AS userId, COUNT(DISTINCT pm.menu_id) AS total
-       FROM sys_user_post up
-       JOIN sys_post p ON p.post_id = up.post_id AND p.del_flag = '0'
-       JOIN sys_post_menu pm ON pm.post_id = up.post_id
-      WHERE up.user_id IN (${placeholders(userIds.length)})
-      GROUP BY up.user_id`,
-    userIds,
-  );
+  const postStmt = selectPostPermCountsByUserIds(userIds);
+  const postRows = await dbClient.query<UserCountRow>(postStmt.sql, postStmt.params);
   postRows.forEach((row) => post.set(row.userId, Number(row.total)));
 
-  const orgRows = await dbClient.query<{ userId: number; total: number }>(
-    `SELECT up.user_id AS userId, COUNT(DISTINCT om.menu_id) AS total
-       FROM sys_user_post up
-       JOIN sys_post p ON p.post_id = up.post_id AND p.del_flag = '0'
-       JOIN sys_org o ON o.org_id = p.org_id AND o.del_flag = '0'
-       JOIN sys_org_menu om ON om.org_id = o.org_id OR FIND_IN_SET(om.org_id, o.ancestors)
-      WHERE up.user_id IN (${placeholders(userIds.length)})
-      GROUP BY up.user_id`,
-    userIds,
-  );
+  const orgStmt = selectOrgPermCountsByUserIds(userIds);
+  const orgRows = await dbClient.query<UserCountRow>(orgStmt.sql, orgStmt.params);
   orgRows.forEach((row) => org.set(row.userId, Number(row.total)));
 
   return { post, org };
@@ -256,29 +185,13 @@ export async function listUsers(
   query: UserQuery,
   currentUserId: number,
 ): Promise<PageResult<UserListItem>> {
-  const conditions = [`u.del_flag = '0'`];
-  const params: unknown[] = [];
-
-  if (query.keyword) {
-    conditions.push('(u.user_name LIKE ? OR u.nick_name LIKE ? OR u.phonenumber LIKE ?)');
-    const pattern = `%${escapeLike(query.keyword)}%`;
-    params.push(pattern, pattern, pattern);
-  }
-  if (query.status) {
-    conditions.push('u.status = ?');
-    params.push(query.status);
-  }
-
   let orgFilterIds: number[] | null = null;
   if (query.orgId) {
     orgFilterIds = await getOrgDescendantIds(query.orgId);
   }
 
   const scope = await resolveDataScope(currentUserId);
-  if (scope.mode === 'self') {
-    conditions.push('u.user_id = ?');
-    params.push(currentUserId);
-  } else if (scope.mode === 'orgs') {
+  if (scope.mode === 'orgs') {
     const allowed = new Set(scope.orgIds);
     orgFilterIds = orgFilterIds
       ? orgFilterIds.filter((orgId) => allowed.has(orgId))
@@ -290,31 +203,24 @@ export async function listUsers(
   if (orgFilterIds && orgFilterIds.length === 0) {
     return paginate([], 0, page, pageSize);
   }
-  if (orgFilterIds) {
-    conditions.push(
-      `EXISTS (SELECT 1 FROM sys_user_post up
-                JOIN sys_post p ON p.post_id = up.post_id AND p.del_flag = '0'
-               WHERE up.user_id = u.user_id
-                 AND p.org_id IN (${placeholders(orgFilterIds.length)}))`,
-    );
-    params.push(...orgFilterIds);
-  }
 
-  const whereSql = conditions.join(' AND ');
+  const filter = buildUserListFilter({
+    keyword: query.keyword,
+    status: query.status,
+    orgFilterIds,
+    scopeMode: scope.mode,
+    currentUserId,
+  });
 
+  const countStmt = countUsers(filter);
   const countRow = await dbClient.queryOne<{ total: number }>(
-    `SELECT COUNT(*) AS total FROM sys_user u WHERE ${whereSql}`,
-    params,
+    countStmt.sql,
+    countStmt.params,
   );
   const total = Number(countRow?.total ?? 0);
 
-  const rows = await dbClient.query<UserRow>(
-    `SELECT ${USER_COLUMNS} FROM sys_user u
-      WHERE ${whereSql}
-      ORDER BY u.user_id
-      LIMIT ? OFFSET ?`,
-    [...params, pageSize, offset],
-  );
+  const pageStmt = selectUsersPage(filter, pageSize, offset);
+  const rows = await dbClient.query<UserRow>(pageStmt.sql, pageStmt.params);
 
   return paginate(await hydrateUsers(rows), total, page, pageSize);
 }
@@ -334,9 +240,10 @@ export async function createUser(
   input: CreateUserInput,
   operator: string,
 ): Promise<UserListItem> {
+  const dupStmt = selectUserIdByName(input.userName);
   const duplicated = await dbClient.queryOne<{ userId: number }>(
-    `SELECT user_id AS userId FROM sys_user WHERE user_name = ? LIMIT 1`,
-    [input.userName],
+    dupStmt.sql,
+    dupStmt.params,
   );
   if (duplicated) {
     throw new HttpError(409, '登录账号已存在');
@@ -528,17 +435,12 @@ export async function getUserPermissionDetail(
     getPermissionSources(userId),
   ]);
 
-  const postNames =
-    sources.postIds.length > 0
-      ? (
-          await dbClient.query<{ postName: string }>(
-            `SELECT post_name AS postName FROM sys_post
-              WHERE post_id IN (${placeholders(sources.postIds.length)})
-              ORDER BY post_sort, post_id`,
-            sources.postIds,
-          )
-        ).map((row) => row.postName)
-      : [];
+  let postNames: string[] = [];
+  if (sources.postIds.length > 0) {
+    const stmt = selectPostNamesByIds(sources.postIds);
+    const rows = await dbClient.query<{ postName: string }>(stmt.sql, stmt.params);
+    postNames = rows.map((row) => row.postName);
+  }
 
   const sourceList: PermissionSource[] = [
     {

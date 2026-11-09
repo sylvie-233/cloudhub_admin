@@ -6,6 +6,7 @@ import type {
 } from '@cloudhub/types';
 
 import { dbClient } from '../db/index.js';
+import { selectActivePostsByUserId } from '../sql/user.sql.js';
 import type { ClientInfo } from '../utils/client.js';
 import { HttpError } from '../utils/http.js';
 import { signToken } from '../utils/jwt.js';
@@ -29,16 +30,8 @@ interface LoginPostRow {
 }
 
 async function loadLoginPosts(userId: number): Promise<LoginPost[]> {
-  const rows = await dbClient.query<LoginPostRow>(
-    `SELECT p.post_id AS postId, p.post_name AS postName, p.org_id AS orgId,
-            o.org_name AS orgName, o.ancestors, o.leader_post_id AS leaderPostId
-       FROM sys_user_post up
-       JOIN sys_post p ON p.post_id = up.post_id AND p.del_flag = '0' AND p.status = '0'
-       JOIN sys_org o ON o.org_id = p.org_id AND o.del_flag = '0'
-      WHERE up.user_id = ?
-      ORDER BY p.post_sort, p.post_id`,
-    [userId],
-  );
+  const stmt = selectActivePostsByUserId(userId);
+  const rows = await dbClient.query<LoginPostRow>(stmt.sql, stmt.params);
 
   const pathMap = await getOrgPathMap();
 
