@@ -277,7 +277,7 @@ async function handleExport(): Promise<void> {
   exporting.value = true;
   try {
     await logApi.exportCsv(buildQuery(false));
-    toast.success('登录日志导出已开始');
+    toast.success('已按当前筛选条件导出登录日志');
   } catch (error) {
     toast.error(error instanceof Error ? error.message : '导出登录日志失败');
   } finally {
@@ -361,17 +361,6 @@ onMounted(() => {
         <Button variant="outline" size="sm" :disabled="listLoading || statsLoading" @click="refreshAll">
           <RefreshCw class="size-4" :class="(listLoading || statsLoading) && 'animate-spin'" />
           刷新
-        </Button>
-        <Button
-          v-if="canExport"
-          variant="outline"
-          size="sm"
-          :disabled="exporting"
-          @click="handleExport"
-        >
-          <Loader2 v-if="exporting" class="size-4 animate-spin" />
-          <Download v-else class="size-4" />
-          导出
         </Button>
         <Button
           v-if="canClean"
@@ -477,6 +466,17 @@ onMounted(() => {
             <Loader2 v-if="listLoading" class="size-3.5 animate-spin" />
             <Search v-else class="size-3.5" />
             查询
+          </Button>
+          <Button
+            v-if="canExport"
+            variant="outline"
+            size="sm"
+            :disabled="exporting"
+            @click="handleExport"
+          >
+            <Loader2 v-if="exporting" class="size-3.5 animate-spin" />
+            <Download v-else class="size-3.5" />
+            导出
           </Button>
         </div>
       </div>
